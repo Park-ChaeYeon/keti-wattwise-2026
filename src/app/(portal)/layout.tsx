@@ -1,15 +1,13 @@
-import { redirect } from "next/navigation";
 import Nav from "@/components/Nav";
 import ChatWidget from "@/components/ChatWidget";
-import { currentUser } from "@/lib/auth";
 
+// 정적(GitHub Pages) 빌드용 — 로그인/서버 인증 없이 게스트로 바로 렌더
 export default function PortalLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const user = currentUser();
-  if (!user) redirect("/login");
+  const user = { name: "게스트", role: "데모" };
   return (
     <div className="min-h-screen">
       <Nav user={{ name: user.name, role: user.role }} />
