@@ -1,348 +1,262 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  ComposedChart,
-  Area,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  Cell,
-} from "recharts";
-import { HOUSEHOLDS, allCalc, calc, houseAnswer, homeSolar, type HouseholdCalc } from "@/lib/households";
-import { won } from "@/lib/domain";
-import { householdAnomaly, type AnomalyScenario } from "@/lib/householdAnomaly";
-import AnomalyMethodology from "@/components/AnomalyMethodology";
-import dynamic from "next/dynamic";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { bill, tierOf, won } from "@/lib/domain";
 
-const BuildingSolarMap = dynamic(() => import("@/components/BuildingSolarMap"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-[380px] items-center justify-center rounded-xl bg-slate-100 text-sm text-slate-400">지도 로딩…</div>
-  ),
-});
+type Appliance = { id: string; name: string; icon: string; watt: number; defaultHours: number; timing: "always" | "morning" | "day" | "evening" | "night" };
+type ApplianceSetting = { enabled: boolean; hours: number; todayHours: number };
+type HouseholdMeta = { id: string; type: string; area: string; city: string; start: string; end: string; rows: number; split?: string };
+type ForecastPoint = { timestamp?: string; "0.1"?: number; "0.5"?: number; "0.9"?: number; prediction_kwh?: number };
+type DemoResult = { house: HouseholdMeta; forecast: { hour: string; low: number; expected: number; high: number; range: number }[]; monthly: number; anomaly: { scenario: string; score: number; threshold: number; isAnomaly: boolean } };
 
+const CATALOG: Appliance[] = [
+  { id: "fridge", name: "냉장고", icon: "🧊", watt: 45, defaultHours: 24, timing: "always" },
+  { id: "aircon", name: "에어컨", icon: "❄️", watt: 1800, defaultHours: 4, timing: "day" },
+  { id: "tv", name: "TV", icon: "📺", watt: 120, defaultHours: 3, timing: "evening" },
+  { id: "washer", name: "세탁기", icon: "🧺", watt: 500, defaultHours: 0.5, timing: "day" },
+  { id: "dryer", name: "의류건조기", icon: "🌀", watt: 1500, defaultHours: 0.7, timing: "evening" },
+  { id: "induction", name: "인덕션", icon: "🍳", watt: 2000, defaultHours: 0.6, timing: "evening" },
+  { id: "rice", name: "전기밥솥", icon: "🍚", watt: 700, defaultHours: 0.7, timing: "morning" },
+  { id: "computer", name: "컴퓨터·모니터", icon: "💻", watt: 260, defaultHours: 5, timing: "day" },
+  { id: "purifier", name: "공기청정기", icon: "🌫️", watt: 35, defaultHours: 12, timing: "always" },
+  { id: "lighting", name: "조명", icon: "💡", watt: 90, defaultHours: 5, timing: "night" },
+  { id: "floor", name: "전기장판", icon: "🛏️", watt: 120, defaultHours: 7, timing: "night" },
+  { id: "dishwasher", name: "식기세척기", icon: "🍽️", watt: 1200, defaultHours: 0.5, timing: "evening" },
+];
+
+const INITIAL = Object.fromEntries(CATALOG.map((item) => [item.id, {
+  enabled: ["fridge", "aircon", "tv", "washer", "induction", "lighting"].includes(item.id),
+  hours: item.defaultHours,
+  todayHours: item.defaultHours,
+}])) as Record<string, ApplianceSetting>;
+
+const PEAK: Record<Appliance["timing"], number> = { always: 12, morning: 8, day: 14, evening: 20, night: 23 };
 const AMBER = "#E39A00";
 const TEAL = "#0A9AA8";
+const SCENARIOS = ["normal", "always_on", "cooking_loss", "inactive", "night_loss", "away"] as const;
+const SCENARIO_COPY: Record<string, { title: string; detail: string; action: string }> = {
+  normal: { title: "평소 범위", detail: "오늘 사용 패턴이 학습된 정상 범위 안에 있습니다.", action: "현재 사용 패턴을 유지해도 좋습니다." },
+  always_on: { title: "상시 부하 급증", detail: "꺼져 있어야 할 시간에도 높은 부하가 계속 감지됐습니다.", action: "냉난방기·전열기·대기전력을 확인하세요." },
+  cooking_loss: { title: "조리 패턴 누락", detail: "평소 식사 시간대의 조리 전력 패턴이 나타나지 않았습니다.", action: "외출 여부나 생활 패턴 변화를 확인하세요." },
+  inactive: { title: "장시간 활동 저하", detail: "평소보다 활동성 부하가 오랫동안 낮게 유지됐습니다.", action: "재실 중이라면 주요 가전과 안부를 확인하세요." },
+  night_loss: { title: "야간 사용 변화", detail: "야간 사용이 평소와 다르지만 현재 임계값 이내입니다.", action: "며칠간 같은 변화가 반복되는지 관찰하세요." },
+  away: { title: "외출 패턴", detail: "전체 부하가 낮고 안정적인 외출 패턴으로 판단됩니다.", action: "불필요한 상시 부하만 없는지 확인하세요." },
+};
 
-type Msg = { role: "user" | "bot"; text: string };
-const has = (q: string, ...k: string[]) => k.some((x) => q.includes(x));
+function hourWeight(hour: number, timing: Appliance["timing"]) {
+  if (timing === "always") return 1;
+  const distance = Math.min(Math.abs(hour - PEAK[timing]), 24 - Math.abs(hour - PEAK[timing]));
+  return 0.08 + Math.exp(-(distance ** 2) / (timing === "day" ? 18 : 5));
+}
 
 export default function HouseholdsPage() {
-  const cards = useMemo(() => allCalc(), []);
-  const [sel, setSel] = useState<string | null>(null);
-  const c = sel ? calc(HOUSEHOLDS.find((h) => h.id === sel)!) : null;
+  const [mode, setMode] = useState<"demo" | "direct">("demo");
+  const [homeType, setHomeType] = useState("아파트");
+  const [residents, setResidents] = useState(2);
+  const [occupancy, setOccupancy] = useState<"away" | "normal" | "home">("normal");
+  const [sensitivity, setSensitivity] = useState<"relaxed" | "normal" | "sensitive">("normal");
+  const [settings, setSettings] = useState(INITIAL);
+  const [demoState, setDemoState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [demoError, setDemoError] = useState("");
+  const [demo, setDemo] = useState<DemoResult | null>(null);
+
+  const result = useMemo(() => {
+    const selected = CATALOG.filter((item) => settings[item.id].enabled);
+    const occupancyFactor = { away: 0.86, normal: 1, home: 1.18 }[occupancy];
+    const residentBase = 1.7 + residents * 0.75;
+    const applianceDaily = selected.reduce((sum, item) => sum + item.watt * settings[item.id].hours / 1000, 0);
+    const daily = (residentBase + applianceDaily) * occupancyFactor;
+    const monthly = daily * 30;
+    const hourly = Array.from({ length: 24 }, (_, hour) => {
+      let expected = residentBase / 24;
+      let observed = residentBase / 24;
+      selected.forEach((item) => {
+        const weights = Array.from({ length: 24 }, (_, h) => hourWeight(h, item.timing));
+        const weightTotal = weights.reduce((a, b) => a + b, 0);
+        expected += item.watt * settings[item.id].hours / 1000 * weights[hour] / weightTotal;
+        observed += item.watt * settings[item.id].todayHours / 1000 * weights[hour] / weightTotal;
+      });
+      expected *= occupancyFactor;
+      observed *= occupancyFactor * (1 + Math.sin(hour * 1.7) * 0.035);
+      return { hour: `${hour}시`, expected: +expected.toFixed(2), observed: +observed.toFixed(2), low: +(expected * 0.78).toFixed(2), high: +(expected * 1.22).toFixed(2) };
+    });
+    const applianceRows = selected.map((item) => {
+      const normal = item.watt * settings[item.id].hours / 1000 * 30;
+      const today = item.watt * settings[item.id].todayHours / 1000;
+      const expectedToday = item.watt * settings[item.id].hours / 1000;
+      const deviation = Math.abs(today - expectedToday) / Math.max(0.08, expectedToday);
+      return { ...item, normal, today, deviation };
+    }).sort((a, b) => b.normal - a.normal);
+    const threshold = { relaxed: 0.7, normal: 0.45, sensitive: 0.28 }[sensitivity];
+    const unusual = applianceRows.filter((item) => item.deviation > threshold);
+    const score = Math.min(100, Math.round((unusual[0]?.deviation ?? 0) * 72));
+    return { selected, daily, monthly, hourly, applianceRows, unusual, threshold, score };
+  }, [occupancy, residents, sensitivity, settings]);
+
+  const monthlyBill = bill(result.monthly);
+  const riskTone = result.score >= 70 ? "text-danger" : result.score >= 35 ? "text-amber" : "text-teal";
+  const status = result.score >= 70 ? "확인 필요" : result.score >= 35 ? "주의 관찰" : "정상 범위";
+
+  function update(id: string, patch: Partial<ApplianceSetting>) {
+    setSettings((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
+  }
+
+  const loadDemo = useCallback(async () => {
+    setDemoState("loading");
+    setDemoError("");
+    try {
+      const listResponse = await fetch("/api/household-forecast");
+      const listData = await listResponse.json() as { houses?: HouseholdMeta[]; error?: string };
+      if (!listResponse.ok || !listData.houses?.length) throw new Error(listData.error ?? "진단할 가구 데이터를 찾지 못했습니다.");
+      const stored = sessionStorage.getItem("wattwise-demo");
+      const saved = stored ? JSON.parse(stored) as { houseId?: string; scenario?: string } : null;
+      const available = listData.houses.filter((house) => /^(H\d{3}|house_\d+)$/.test(house.id));
+      const house = available.find((item) => item.id === saved?.houseId) ?? available[Math.floor(Math.random() * available.length)];
+      const scenario = SCENARIOS.includes(saved?.scenario as typeof SCENARIOS[number]) ? saved!.scenario! : SCENARIOS[Math.floor(Math.random() * SCENARIOS.length)];
+      sessionStorage.setItem("wattwise-demo", JSON.stringify({ houseId: house.id, scenario }));
+      const [forecastResponse, anomalyResponse] = await Promise.all([
+        fetch("/api/household-forecast", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ houseId: house.id }) }),
+        fetch("/api/anomaly", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scenario }) }),
+      ]);
+      const forecastData = await forecastResponse.json() as { forecast?: ForecastPoint[]; error?: string };
+      const anomalyData = await anomalyResponse.json() as DemoResult["anomaly"] & { error?: string };
+      if (!forecastResponse.ok || !forecastData.forecast?.length) throw new Error(forecastData.error ?? "예측 결과를 만들지 못했습니다.");
+      if (!anomalyResponse.ok || anomalyData.error) throw new Error(anomalyData.error ?? "이상탐지 결과를 만들지 못했습니다.");
+      const forecast = forecastData.forecast.map((point, index) => {
+        const rawExpected = point["0.5"] ?? point.prediction_kwh ?? 0;
+        const date = point.timestamp ? new Date(point.timestamp) : null;
+        const low = point["0.1"] ?? rawExpected * 0.8;
+        const high = point["0.9"] ?? rawExpected * 1.2;
+        return { hour: date && !Number.isNaN(date.getTime()) ? `${date.getHours()}시` : `${index}시`, low, expected: rawExpected, high, range: Math.max(0, high - low) };
+      });
+      const daily = forecast.reduce((sum, point) => sum + point.expected, 0);
+      setDemo({ house, forecast, monthly: daily * 30, anomaly: anomalyData });
+      setDemoState("done");
+    } catch (error) {
+      setDemoState("error");
+      setDemoError(error instanceof Error ? error.message : "자동 진단에 실패했습니다.");
+    }
+  }, []);
+
+  useEffect(() => { void loadDemo(); }, [loadDemo]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="section-title">🏠 스마트홈 진단</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          가정 A~E를 선택해 사용량·요금과 이상탐지를 함께 확인하세요. 사용량은 정격전력×사용시간 추정치이며, 이상탐지는 가상 데이터와 규칙 기반 시나리오입니다.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div><div className="eyebrow">Smart home intelligence</div><h1 className="section-title mt-1">스마트홈 사용량 예측·이상 진단</h1><p className="mt-1 text-sm text-slate-500">다음 전력 사용량을 예측하고 평소 기준선과 다른 소비 패턴을 함께 확인합니다.</p></div>
+        <Link href="/analytics" className="btn-ghost">전력 대시보드 보기 ↗</Link>
       </div>
 
-      {!c ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {cards.map((cc) => (
-            <button
-              key={cc.hh.id}
-              onClick={() => setSel(cc.hh.id)}
-              className="card p-5 text-left transition hover:shadow-pop"
-            >
-              <div className="flex items-start justify-between">
-                <div className="text-3xl">{cc.hh.emoji}</div>
-                <span className="badge bg-teal-soft text-teal">이상탐지 데모</span>
-              </div>
-              <div className="mt-3 font-bold">{cc.hh.name}</div>
-              <div className="text-xs text-slate-400">{cc.hh.persons}</div>
-              <p className="mt-2 line-clamp-2 text-xs text-slate-500">{cc.hh.note}</p>
-              <div className="mt-4 flex items-end justify-between">
-                <div>
-                  <div className="text-2xl font-extrabold">{cc.monthly.toFixed(0)}<span className="text-sm">kWh</span></div>
-                  <div className="text-xs text-slate-400">월 예상 · {won(cc.billTotal)}</div>
-                </div>
-                <span className={`badge ${cc.tier === 3 ? "bg-danger-soft text-danger" : "bg-slate-100 text-slate-500"}`}>{cc.tier}구간</span>
-              </div>
-            </button>
-          ))}
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 p-1.5">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <button type="button" onClick={() => setMode("demo")} className={`rounded-xl p-4 text-left transition ${mode === "demo" ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:bg-white/60"}`}>
+            <div className={`text-[10px] font-black tracking-[0.12em] ${mode === "demo" ? "text-teal" : "text-slate-400"}`}>RECOMMENDED</div><div className="mt-1 font-extrabold">AI 자동 진단</div><div className="mt-1 text-xs text-slate-500">가구 전력 데이터로 예측과 이상탐지를 즉시 실행</div>
+          </button>
+          <button type="button" onClick={() => setMode("direct")} className={`rounded-xl p-4 text-left transition ${mode === "direct" ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:bg-white/60"}`}>
+            <div className={`text-[10px] font-black tracking-[0.12em] ${mode === "direct" ? "text-amber" : "text-slate-400"}`}>CUSTOM</div><div className="mt-1 font-extrabold">내 정보로 상세 진단</div><div className="mt-1 text-xs text-slate-500">보유 가전과 사용시간을 입력해 맞춤 분석</div>
+          </button>
         </div>
+      </section>
+
+      {mode === "demo" ? (
+        <>
+          <section className="card border-l-4 border-l-teal p-6 md:p-7">
+            <div className="flex items-start gap-4"><div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-soft text-lg text-teal">⌁</div><div><div className="flex items-center gap-2 text-xs font-bold text-teal"><span className="h-1.5 w-1.5 rounded-full bg-teal" />AI 분석 완료</div><h2 className="mt-1.5 text-xl font-black">전력 데이터를 자동으로 진단했습니다</h2><p className="mt-2 max-w-2xl break-keep text-sm leading-6 text-slate-500">최근 사용 패턴으로 다음 24시간 소비량을 예측하고, 가구별 기준선에서 벗어난 신호를 함께 분석했습니다.</p></div></div>
+            <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4"><span className="badge bg-slate-100 text-slate-500">실제 시계열</span><span className="badge bg-slate-100 text-slate-500">Chronos-2 예측</span><span className="badge bg-slate-100 text-slate-500">이상탐지 모델</span><span className="badge bg-slate-100 text-slate-500">익명 처리</span></div>
+          </section>
+
+          {demoState === "error" && <div className="rounded-xl bg-danger-soft p-5 text-sm text-danger">{demoError}<button type="button" className="ml-3 underline" onClick={() => void loadDemo()}>다시 시도</button></div>}
+          {demoState === "loading" && !demo && <div className="card flex min-h-[360px] flex-col items-center justify-center"><span className="h-8 w-8 animate-spin rounded-full border-4 border-teal/20 border-t-teal" /><div className="mt-4 font-bold">실제 모델을 실행하고 있습니다</div><p className="mt-1 text-xs text-slate-400">가구 시계열 예측과 이상탐지를 동시에 처리합니다.</p></div>}
+          {demo && <><div className="grid gap-4 md:grid-cols-4"><Kpi label="내일 예상 사용량" value={`${(demo.monthly / 30).toFixed(1)}kWh`} sub="향후 24시간 중앙 예측" /><Kpi label="월 예상 사용량" value={`${Math.round(demo.monthly)}kWh`} sub="24시간 예측 × 30일" /><Kpi label="예상 전기요금" value={won(bill(demo.monthly).total)} tone="text-amber" sub={`${tierOf(demo.monthly)}구간 요금`} /><Kpi label="AI 진단 상태" value={demo.anomaly.isAnomaly ? "이상 신호 감지" : "정상 범위"} tone={demo.anomaly.isAnomaly ? "text-danger" : "text-teal"} sub={`기준선 대비 ${Math.min(999, Math.round(demo.anomaly.score / Math.max(0.001, demo.anomaly.threshold) * 100))}%`} /></div><div className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]"><section className="card p-5"><div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-sm font-bold">다음 24시간 사용량 예측</div><div className="mt-1 text-xs text-slate-400">{demo.house.id}의 최근 실측을 Chronos-2 체크포인트에 입력한 결과</div></div><div className="flex items-center gap-3 text-[10px] text-slate-400"><span><i className="mr-1 inline-block h-0.5 w-4 bg-teal align-middle" />중앙 예측</span><span><i className="mr-1 inline-block h-2 w-4 bg-teal/15 align-middle" />10–90% 범위</span></div></div><div className="mt-4 h-72"><ResponsiveContainer><ComposedChart data={demo.forecast} margin={{ left: -8, right: 8 }}><CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" vertical={false} /><XAxis dataKey="hour" interval={2} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} /><YAxis width={42} tick={{ fontSize: 10, fill: "#94a3b8" }} unit="k" axisLine={false} tickLine={false} /><Tooltip formatter={(v: number, name: string) => [name === "range" ? `${v.toFixed(2)}kWh` : `${v.toFixed(2)}kWh`, name === "expected" ? "중앙 예측" : name === "range" ? "예측 구간 폭" : "하한"]} /><Area dataKey="low" stackId="interval" stroke="none" fill="transparent" isAnimationActive={false} /><Area dataKey="range" stackId="interval" stroke="none" fill={TEAL} fillOpacity={0.13} isAnimationActive={false} /><Line dataKey="expected" stroke={TEAL} strokeWidth={2.5} dot={false} isAnimationActive={false} /></ComposedChart></ResponsiveContainer></div><div className="mt-2 flex justify-between border-t border-slate-100 pt-3 text-xs text-slate-400"><span>{demo.house.type} · {demo.house.area}</span><span>{demo.house.rows.toLocaleString()}시간 데이터</span></div></section><AnomalyCard anomaly={demo.anomaly} /></div></>}
+        </>
       ) : (
-        <Detail key={c.hh.id} c={c} onBack={() => setSel(null)} />
+        <>
+
+      <section className="card overflow-hidden">
+        <div className="border-b border-slate-100 px-5 py-4"><div className="text-sm font-bold">1. 우리 집 기본 조건</div><div className="mt-1 text-xs text-slate-400">가구 조건은 기본 부하와 시간대별 사용 패턴에 반영됩니다.</div></div>
+        <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+          <label><span className="label">주거 형태</span><select className="input" value={homeType} onChange={(e) => setHomeType(e.target.value)}><option>아파트</option><option>빌라·다세대</option><option>단독주택</option><option>오피스텔·원룸</option></select></label>
+          <label><span className="label">거주 인원</span><div className="relative"><input className="input pr-9" type="number" min="1" max="10" value={residents} onChange={(e) => setResidents(Math.max(1, +e.target.value))} /><span className="absolute right-3 top-2 text-sm text-slate-400">명</span></div></label>
+          <label><span className="label">평소 재실 패턴</span><select className="input" value={occupancy} onChange={(e) => setOccupancy(e.target.value as typeof occupancy)}><option value="away">낮 시간 외출</option><option value="normal">출퇴근·일반</option><option value="home">재택·종일 재실</option></select></label>
+          <label><span className="label">이상 감지 민감도</span><select className="input" value={sensitivity} onChange={(e) => setSensitivity(e.target.value as typeof sensitivity)}><option value="relaxed">낮게</option><option value="normal">보통</option><option value="sensitive">민감하게</option></select></label>
+        </div>
+      </section>
+
+      <section className="card overflow-hidden">
+        <div className="border-b border-slate-100 px-5 py-4"><div className="text-sm font-bold">2. 가전과 사용시간 선택</div><div className="mt-1 text-xs text-slate-400">평소 시간은 예측 기준, 오늘 시간은 이상탐지 관측값으로 사용합니다.</div></div>
+        <div className="grid gap-px bg-slate-100 sm:grid-cols-2 lg:grid-cols-3">
+          {CATALOG.map((item) => {
+            const setting = settings[item.id];
+            return <div key={item.id} className={`bg-white p-4 transition ${setting.enabled ? "" : "opacity-55"}`}>
+              <div className="flex items-center justify-between"><label className="flex cursor-pointer items-center gap-2 font-semibold"><input type="checkbox" checked={setting.enabled} onChange={(e) => update(item.id, { enabled: e.target.checked })} className="h-4 w-4 accent-ink" /><span>{item.icon} {item.name}</span></label><span className="text-xs text-slate-400">{item.watt.toLocaleString()}W</span></div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <label><span className="text-[10px] font-semibold text-slate-400">평소 하루</span><div className="relative mt-1"><input className="input !py-1.5 pr-7" type="number" min="0" max="24" step="0.5" disabled={!setting.enabled} value={setting.hours} onChange={(e) => update(item.id, { hours: Math.min(24, Math.max(0, +e.target.value)) })} /><span className="absolute right-2 top-1.5 text-xs text-slate-400">h</span></div></label>
+                <label><span className="text-[10px] font-semibold text-teal">오늘 관측</span><div className="relative mt-1"><input className="input !py-1.5 pr-7 focus:border-teal focus:ring-teal/10" type="number" min="0" max="24" step="0.5" disabled={!setting.enabled} value={setting.todayHours} onChange={(e) => update(item.id, { todayHours: Math.min(24, Math.max(0, +e.target.value)) })} /><span className="absolute right-2 top-1.5 text-xs text-slate-400">h</span></div></label>
+              </div>
+            </div>;
+          })}
+        </div>
+      </section>
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <Kpi label="월 예상 사용량" value={`${Math.round(result.monthly)}kWh`} sub={`${homeType} · ${residents}인 기준`} />
+        <Kpi label="예상 전기요금" value={won(monthlyBill.total)} tone="text-amber" sub={`${tierOf(result.monthly)}구간 요금`} />
+        <Kpi label="선택 가전" value={`${result.selected.length}개`} sub={`하루 평균 ${result.daily.toFixed(1)}kWh`} />
+        <Kpi label="이상탐지 상태" value={status} tone={riskTone} sub={`편차 점수 ${result.score}/100`} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
+        <section className="card p-5">
+          <div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-sm font-bold">다음 24시간 사용량 예측</div><div className="mt-1 text-xs text-slate-400">선택한 가전과 재실 패턴 기반 · 음영은 예상 범위</div></div><div className="flex gap-3 text-[11px]"><span className="text-teal">━ 오늘 관측</span><span className="text-amber">━ 예측</span></div></div>
+          <div className="mt-4 h-72"><ResponsiveContainer><ComposedChart data={result.hourly} margin={{ left: -8, right: 8 }}><CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" /><XAxis dataKey="hour" interval={2} tick={{ fontSize: 10, fill: "#94a3b8" }} /><YAxis width={42} tick={{ fontSize: 10, fill: "#94a3b8" }} unit="k" /><Tooltip formatter={(v: number, name) => [`${v.toFixed(2)}kWh`, name]} /><Area dataKey="high" stroke="none" fill={AMBER} fillOpacity={0.1} /><Area dataKey="low" stroke="none" fill="white" /><Line dataKey="expected" name="예측" stroke={AMBER} strokeWidth={2.5} dot={false} /><Line dataKey="observed" name="오늘 관측" stroke={TEAL} strokeWidth={2} dot={false} /></ComposedChart></ResponsiveContainer></div>
+        </section>
+        <section className="card p-5">
+          <div className="text-sm font-bold">자동 이상탐지</div>
+          <div className={`mt-4 text-3xl font-black ${riskTone}`}>{status}</div>
+          <div className="mt-1 text-xs text-slate-400">민감도 기준 편차 {(result.threshold * 100).toFixed(0)}% 초과 감지</div>
+          <div className="mt-5 space-y-2">
+            {result.unusual.length ? result.unusual.slice(0, 4).map((item) => <div key={item.id} className="rounded-lg bg-danger-soft p-3"><div className="flex items-center justify-between text-sm"><b>{item.icon} {item.name}</b><span className="font-bold text-danger">{item.deviation > 1 ? "+100%" : `${Math.round(item.deviation * 100)}%`} 편차</span></div><div className="mt-1 text-xs text-slate-500">평소 {settings[item.id].hours}h → 오늘 {settings[item.id].todayHours}h</div></div>) : <div className="rounded-lg bg-teal-soft p-4 text-sm leading-6 text-slate-600">선택한 모든 가전이 평소 사용 범위 안에 있습니다.</div>}
+          </div>
+          <p className="mt-4 text-[11px] leading-5 text-slate-400">전력 패턴의 편차를 감지하는 간이 모델이며, 고장이나 응급상황을 확정하지 않습니다.</p>
+        </section>
+      </div>
+
+      <section className="card overflow-hidden">
+        <div className="border-b border-slate-100 px-5 py-4"><div className="text-sm font-bold">가전별 예측 상세</div><div className="mt-1 text-xs text-slate-400">예상 사용량이 큰 순서입니다.</div></div>
+        <div className="divide-y divide-slate-100 px-5">
+          {result.applianceRows.map((item) => <div key={item.id} className="grid items-center gap-2 py-3 text-sm sm:grid-cols-[1fr_120px_120px]"><div className="font-medium">{item.icon} {item.name} <span className="ml-2 text-xs font-normal text-slate-400">{item.watt.toLocaleString()}W</span></div><div><span className="text-xs text-slate-400">월 예상 </span><b>{item.normal.toFixed(1)}kWh</b></div><div className={item.deviation > result.threshold ? "font-bold text-danger" : "text-slate-500"}>오늘 {item.today.toFixed(1)}kWh</div></div>)}
+        </div>
+      </section>
+        </>
       )}
     </div>
   );
 }
 
 function Kpi({ label, value, sub, tone = "text-ink" }: { label: string; value: string; sub?: string; tone?: string }) {
-  return (
-    <div className="card p-5">
-      <div className="text-xs font-semibold text-slate-500">{label}</div>
-      <div className={`mt-1 text-2xl font-extrabold ${tone}`}>{value}</div>
-      {sub && <div className="mt-1 text-xs text-slate-400">{sub}</div>}
-    </div>
-  );
+  return <div className="card p-5"><div className="text-xs font-semibold text-slate-500">{label}</div><div className={`mt-1 text-2xl font-extrabold ${tone}`}>{value}</div>{sub && <div className="mt-1 text-xs text-slate-400">{sub}</div>}</div>;
 }
 
-function Detail({ c, onBack }: { c: HouseholdCalc; onBack: () => void }) {
-  const elderly = !!c.hh.elderly;
-  const [scenario, setScenario] = useState<AnomalyScenario>("normal");
-  const [modelScore, setModelScore] = useState<{ score: number; threshold: number; isAnomaly: boolean } | null>(null);
-  const [aFrom, setAFrom] = useState(14);
-  const [aNow, setANow] = useState(17);
-  const aNowH = Math.max(aFrom, aNow);
-  const an = useMemo(() => householdAnomaly(c.hh, scenario, aFrom, aNowH), [c.hh, scenario, aFrom, aNowH]);
-  const anTone = an.tier === "경보" ? "#D8432B" : an.tier === "주의" || an.tier === "관심" ? "#E39A00" : "#0A9AA8";
-  const chartData = c.items.map((a) => ({ name: `${a.icon} ${a.name}`, kwh: +a.monthlyKwh.toFixed(1) }));
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/anomaly", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scenario }) })
-      .then((res) => res.json())
-      .then((data) => { if (!cancelled && typeof data.score === "number") setModelScore(data); })
-      .catch(() => { if (!cancelled) setModelScore(null); });
-    return () => { cancelled = true; };
-  }, [scenario]);
-
-  const [msgs, setMsgs] = useState<Msg[]>([
-    {
-      role: "bot",
-      text: `${c.hh.name}의 추정 데이터와 이상탐지 데모입니다 🔌 “제일 많이 쓰는 가전?”, “이 집 이상 있어?”, “정상으로 되돌려”를 물어보세요.`,
-    },
-  ]);
-  const [input, setInput] = useState("");
-  const [subsidyOn, setSubsidyOn] = useState(true);
-  const hs = homeSolar(c.hh.solarKw ?? 0.4, c.monthly * 12, subsidyOn);
-  const listRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
-  }, [msgs]);
-
-  function reply(q: string): { text: string; set?: [number, number]; scenario?: AnomalyScenario } {
-    if (has(q, "정상", "되돌", "해제", "원래"))
-      return { scenario: "normal", text: "정상 시나리오로 되돌렸습니다. 모의 점수는 0이며 실제 안전 여부를 판단한 결과는 아닙니다." };
-    if (has(q, "외출", "여행"))
-      return { scenario: "away", text: "외출·여행을 가정한 예외 시나리오로 전환했습니다. 실제 외출을 자동 감지한 것은 아닙니다." };
-    if (has(q, "상시", "계속 켜", "켜져"))
-      return { scenario: "always_on", text: "TV·조명 상시 ON 이상 시나리오로 전환했습니다. exp.py PoC의 이상 유형을 재현합니다." };
-    if (has(q, "취사", "요리"))
-      return { scenario: "cooking_loss", text: "저녁 취사 부하 소실 시나리오로 전환했습니다. exp.py PoC의 이상 유형을 재현합니다." };
-    if (has(q, "야간", "밤"))
-      return { scenario: "night_loss", text: "야간 활동 소실 시나리오로 전환했습니다. exp.py PoC의 이상 유형을 재현합니다." };
-    if (has(q, "쓰러", "위험 상황", "이상 상황", "비상", "응급", "활동 정지"))
-      return { scenario: "inactive", set: [13, 20], text: "활동 정지 시나리오입니다. 13시부터 활동가전 사용량이 감소하고 7시간이 지난 가상 상황으로 전환했습니다." };
-    if (has(q, "이상", "안부", "위험", "상태", "안전", "지금"))
-      return { text: `이상탐지 데모 · ${c.hh.name} — ${an.tier}, 모의 점수 ${an.risk}/100. ${an.narrative}` };
-    return { text: houseAnswer(q, c) };
-  }
-  function send(text: string) {
-    const t = text.trim();
-    if (!t) return;
-    setMsgs((m) => [...m, { role: "user", text: t }]);
-    setInput("");
-    const r = reply(t);
-    if (r.scenario) setScenario(r.scenario);
-    if (r.set) {
-      setAFrom(r.set[0]);
-      setANow(r.set[1]);
-    }
-    setTimeout(() => setMsgs((m) => [...m, { role: "bot", text: r.text }]), 240);
-  }
-
-  const chips = ["이 집 이상 있어?", "활동 정지 보여줘", "정상으로 되돌려", "뭘 줄여야 해?"];
-
-  const actData = an.activity.map((a) => ({
-        hour: a.hour,
-        lo: Math.max(0, a.base - a.band),
-        band: 2 * a.band,
-        base: a.base,
-        today: a.hour <= an.nowHour ? a.today : null,
-      }));
-
+function AnomalyCard({ anomaly }: { anomaly: DemoResult["anomaly"] }) {
+  const copy = SCENARIO_COPY[anomaly.scenario] ?? SCENARIO_COPY.normal;
+  const ratio = anomaly.score / Math.max(0.001, anomaly.threshold);
+  const gauge = Math.min(100, Math.round(ratio * 50));
   return (
-    <div className="space-y-6">
-      <button onClick={onBack} className="text-sm text-slate-500 hover:underline">← 가정 목록</button>
-
-      <div className="card flex flex-wrap items-center gap-4 p-6">
-        <div className="text-4xl">{c.hh.emoji}</div>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <div className="text-xl font-extrabold">{c.hh.name}</div>
-            {elderly && <span className="badge bg-slate-100 text-slate-500">고령 1인가구</span>}
-          </div>
-          <div className="text-xs text-slate-400">{c.hh.persons} · {c.hh.note}</div>
-        </div>
+    <section className={`card overflow-hidden border ${anomaly.isAnomaly ? "border-danger/30" : "border-teal/20"}`}>
+      <div className={`p-5 ${anomaly.isAnomaly ? "bg-danger-soft" : "bg-teal-soft"}`}>
+        <div className="flex items-center justify-between"><span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Anomaly detection</span><span className={`badge bg-white ${anomaly.isAnomaly ? "text-danger" : "text-teal"}`}>{anomaly.isAnomaly ? "확인 필요" : "정상"}</span></div>
+        <div className={`mt-4 text-2xl font-black ${anomaly.isAnomaly ? "text-danger" : "text-teal"}`}>{copy.title}</div>
+        <p className="mt-2 break-keep text-sm leading-6 text-slate-600">{copy.detail}</p>
       </div>
-
-      {/* KPI */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Kpi label="통합 월 사용량" value={`${c.monthly.toFixed(0)}kWh`} sub="가전 합산(상향식)" />
-        <Kpi label="예상 청구요금" value={won(c.billTotal)} tone="text-amber" />
-        <Kpi label="누진 구간" value={`${c.tier}구간`} tone={c.tier === 3 ? "text-danger" : "text-ink"} />
-        <Kpi label="최다 사용 가전" value={`${c.top.icon} ${c.top.name}`} sub={`${(c.top.share * 100).toFixed(0)}% · ${won(c.top.cost)}`} tone="text-teal" />
+      <div className="p-5">
+        <div className="flex items-center justify-between text-xs"><span className="font-bold text-slate-600">기준선 편차</span><span className="text-slate-400">모델 점수 {anomaly.score.toFixed(2)} / 기준 {anomaly.threshold.toFixed(2)}</span></div>
+        <div className="relative mt-2 h-2 rounded-full bg-slate-100"><div className={`h-full rounded-full ${anomaly.isAnomaly ? "bg-danger" : "bg-teal"}`} style={{ width: `${gauge}%` }} /><div className="absolute -top-1 left-1/2 h-4 w-px bg-slate-400" title="이상 판단 기준" /></div>
+        <div className="mt-1 flex justify-between text-[9px] text-slate-400"><span>평소 범위</span><span>판단 기준</span><span>높은 편차</span></div>
+        <div className="mt-5 rounded-xl bg-slate-50 p-4"><div className="text-xs font-bold text-ink">권장 조치</div><p className="mt-1 break-keep text-xs leading-5 text-slate-500">{copy.action}</p></div>
+        <p className="mt-4 text-[10px] leading-4 text-slate-400">이 결과는 전력 패턴 편차에 대한 AI 보조 진단이며, 기기 고장이나 응급상황을 확정하지 않습니다.</p>
       </div>
-
-      {/* 모든 가정에서 확인할 수 있는 이상탐지 시나리오 */}
-      <section id="household-anomaly" className="card scroll-mt-32 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-bold">🛟 {c.hh.name} · 이상탐지</h2>
-            <div className="flex flex-wrap justify-end gap-2"><span className="badge bg-slate-50" style={{ color: anTone }}>모의 점수 {an.risk}/100 · {an.tier}</span>{modelScore && <span className={`badge ${modelScore.isAnomaly ? "bg-danger-soft text-danger" : "bg-teal-soft text-teal"}`}>AE 오차 {modelScore.score.toFixed(2)} / 임계 {modelScore.threshold.toFixed(2)}</span>}</div>
-          </div>
-          <p className="mt-2 rounded-lg bg-amber-soft p-3 text-xs leading-relaxed text-slate-600">
-            exp.py PoC의 합성 정상 패턴과 네 가지 이상 주입 유형을 가정별로 재현한 데모입니다. 저장된 PyTorch 오토인코더 체크포인트를 API에서 로드해 복원 오차를 계산하며, 빠른 시나리오 확인을 위해 모델 입력은 합성 1인가구 패턴입니다.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="이상탐지 시나리오">
-            {([['normal', '정상'], ['always_on', '상시 ON'], ['cooking_loss', '취사 소실'], ['inactive', '활동 정지'], ['night_loss', '야간 소실'], ['away', '외출·여행']] as const).map(([value, label]) => (
-              <button key={value} type="button" aria-pressed={scenario === value} onClick={() => setScenario(value)} className={scenario === value ? "btn-primary" : "btn-ghost"}>{label}</button>
-            ))}
-          </div>
-          {scenario !== "normal" && <div className="mt-3 grid gap-4 sm:grid-cols-2">
-            <label>
-              <span className="label">사용량 감소 시작 · {aFrom}시</span>
-              <input aria-label="사용량 감소 시작" type="range" min={6} max={22} value={aFrom} onChange={(e) => setAFrom(+e.target.value)} className="w-full accent-teal" />
-            </label>
-            <label>
-              <span className="label">시나리오 시각 · {aNowH}시</span>
-              <input aria-label="시나리오 시각" type="range" min={aFrom} max={23} value={aNowH} onChange={(e) => setANow(+e.target.value)} className="w-full accent-teal" />
-            </label>
-          </div>}
-          <div className="mt-3 text-xs text-slate-500">점선: 가정별 평소 패턴 예시 · 실선: 선택 시나리오 · 음영: 예시 범위 ±20%</div>
-          <div className="mt-3 h-56 overflow-hidden">
-            <ResponsiveContainer>
-              <ComposedChart data={actData} margin={{ left: -12, right: 8, top: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1e4e2" />
-                <XAxis dataKey="hour" tickFormatter={(h) => `${h}시`} tick={{ fontSize: 10, fill: "#b08a84" }} interval={2} />
-                <YAxis tick={{ fontSize: 10, fill: "#b08a84" }} unit="W" width={42} />
-                <Tooltip formatter={(v) => (typeof v === "number" ? `${Math.round(v)}W` : "-")} labelFormatter={(h) => `${h}시`} />
-                <Area dataKey="lo" stackId="b" stroke="none" fill="transparent" isAnimationActive={false} />
-                <Area dataKey="band" stackId="b" stroke="none" fill="#e7cfca" fillOpacity={0.6} isAnimationActive={false} />
-                <Line name="평소 패턴 예시" dataKey="base" stroke="#c9a59e" strokeDasharray="4 4" dot={false} isAnimationActive={false} />
-                <Line name="선택 시나리오" dataKey="today" stroke={anTone} strokeWidth={3} dot={false} connectNulls isAnimationActive={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-          <p role="status" className="mt-2 rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">{an.narrative}</p>
-          <p className="mt-2 text-xs text-slate-400">24시간 가동으로 설정된 가전({an.baselineWatts}W)은 활동가전 그래프에서 제외합니다.</p>
-          <details className="mt-5 border-t border-slate-100 pt-4">
-            <summary className="cursor-pointer text-sm font-semibold text-teal">이상탐지 방법론·기존 PoC 참고 자료 보기</summary>
-            <div className="mt-4"><AnomalyMethodology /></div>
-          </details>
-      </section>
-
-      {/* 가전별 상세 */}
-      <section className="grid gap-4 lg:grid-cols-[1.15fr_1fr]">
-        <div className="card p-5">
-          <div className="text-sm font-bold">가전별 월 사용량</div>
-          <div className="mt-3 h-80">
-            <ResponsiveContainer>
-              <BarChart data={chartData} layout="vertical" margin={{ left: 40, right: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: "#94a3b8" }} unit="k" />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "#475569" }} width={130} />
-                <Tooltip formatter={(v: number) => `${v.toFixed(0)}kWh`} />
-                <Bar dataKey="kwh" radius={[0, 6, 6, 0]}>
-                  {chartData.map((_, i) => (
-                    <Cell key={i} fill={i === 0 ? AMBER : i === 1 ? TEAL : "#cbd5e1"} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        <div className="card p-5">
-          <div className="text-sm font-bold">가전별 상세 (정격전력 × 사용시간)</div>
-          <div className="mt-3 divide-y divide-slate-100">
-            {c.items.map((a) => (
-              <div key={a.name} className="flex items-center justify-between py-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <span>{a.icon}</span>
-                  <div>
-                    <div className="font-medium text-slate-700">{a.name}</div>
-                    <div className="text-xs text-slate-400">{a.watt}W × {a.hours}h/일</div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="font-bold">{a.monthlyKwh.toFixed(0)}kWh</div>
-                  <div className="text-xs text-slate-400">{won(a.cost)} · {(a.share * 100).toFixed(0)}%</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 태양광 설치 시뮬레이션 */}
-      {c.hh.bIdx != null && (
-        <section className="card p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm font-bold">☀️ 이 가정 태양광 설치 시뮬레이션 (베란다형)</div>
-            <label className="flex items-center gap-2 text-xs text-slate-500">
-              보조금 수령
-              <button
-                onClick={() => setSubsidyOn((v) => !v)}
-                className={`relative h-5 w-9 rounded-full transition ${subsidyOn ? "bg-ok" : "bg-slate-300"}`}
-              >
-                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition ${subsidyOn ? "left-4" : "left-0.5"}`} />
-              </button>
-            </label>
-          </div>
-          <div className="mt-1 text-xs text-slate-400">지도에서 이 가정 건물(하이라이트)을 확인하고, 권장 용량 기준 발전·절감·회수를 실제 시장가로 계산합니다.</div>
-          <div className="mt-3 grid gap-4 lg:grid-cols-[1.35fr_1fr]">
-            <BuildingSolarMap focusIdx={c.hh.bIdx} focusLoc={c.hh.loc} height={380} />
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  ["권장 용량", `${hs.kw}kW`, "text-ink"],
-                  ["연 발전량", `${hs.genYr.toLocaleString()}kWh`, "text-ink"],
-                  ["RE100 달성률", `${hs.re100.toFixed(0)}%`, "text-teal"],
-                  ["투자 회수", `${hs.bep.toFixed(1)}년`, "text-amber"],
-                ].map(([l, v, t]) => (
-                  <div key={l} className="rounded-lg border border-slate-200 p-3 text-center">
-                    <div className="text-xs text-slate-400">{l}</div>
-                    <div className={`text-lg font-extrabold ${t}`}>{v}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="space-y-1.5 rounded-lg bg-slate-50 p-3 text-sm">
-                <div className="flex justify-between"><span className="text-slate-400">자부담 ({subsidyOn ? "보조금 수령" : "미수령"})</span><b>약 {hs.selfPay}만원</b></div>
-                <div className="flex justify-between"><span className="text-slate-400">연 절감액</span><span>약 {hs.saveYr}만원</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">25년 순이익</span><b className="text-ok">{hs.net25.toLocaleString()}만원</b></div>
-              </div>
-              <div className="text-[11px] text-slate-400">※ 실제 시장가 표(400W 단위) 선형 환산 추정. 건물 그림자 등 정밀 산출은 별도 분석 필요.</div>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* 챗봇 */}
-      <div className="card overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-          <div className="text-sm font-bold">🤖 절전 비서 <span className="ml-1 font-normal text-slate-400">· {c.hh.name} 연동</span></div>
-          <span className="badge bg-slate-100 text-slate-500">최다: {c.top.icon} {c.top.name}</span>
-        </div>
-        <div ref={listRef} className="max-h-72 space-y-3 overflow-y-auto px-5 py-4">
-          {msgs.map((m, i) => (
-            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${m.role === "user" ? "bg-ink text-white" : "bg-slate-100 text-slate-700"}`}>
-                {m.text}
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-1.5 px-5">
-          {chips.map((ch) => (
-            <button key={ch} onClick={() => send(ch)} className="chip hover:bg-slate-200">{ch}</button>
-          ))}
-        </div>
-        <form onSubmit={(e) => { e.preventDefault(); send(input); }} className="flex gap-2 p-5">
-          <input value={input} onChange={(e) => setInput(e.target.value)} className="input" placeholder="이 가정에 대해 물어보세요 — 예: 뭘 줄여야 해?" />
-          <button type="submit" className="btn-primary shrink-0">전송</button>
-        </form>
-      </div>
-    </div>
+    </section>
   );
 }

@@ -22,6 +22,7 @@ export default function TradingPlatform({ accountId }: { accountId: string }) {
   const [notice, setNotice] = useState("");
   const [storageNotice, setStorageNotice] = useState("");
   const [paused, setPaused] = useState(false);
+  const [solarProfile, setSolarProfile] = useState<{ panelCount: number; systemKw: number; annualGen: number; annualConsumption: number; surplus: number; location: string; updatedAt: string } | null>(null);
   const storageKey = `wattwise:solar-trading:v1:${accountId}`;
 
   function commit(next: TradingState) {
@@ -41,6 +42,10 @@ export default function TradingPlatform({ accountId }: { accountId: string }) {
     }
     current.current = initial;
     setState(initial);
+    try {
+      const savedProfile = localStorage.getItem("wattwise:solar-profile:v1");
+      if (savedProfile) setSolarProfile(JSON.parse(savedProfile));
+    } catch { /* 저장된 태양광 진단이 없으면 기본 거래 화면 유지 */ }
   }, [storageKey]);
 
   useEffect(() => {
@@ -105,6 +110,16 @@ export default function TradingPlatform({ accountId }: { accountId: string }) {
         <p><b className="text-amber">모의 거래</b> · 가상 시세·호가·잔고를 사용합니다. 실제 결제·전력 이전은 발생하지 않습니다.</p>
         <span>시작 잔고 100,000원 + 300kWh</span>
       </div>
+      {solarProfile ? (
+        <section className="card overflow-hidden">
+          <div className="grid lg:grid-cols-[1fr_auto]">
+            <div className="p-5"><div className="flex items-center gap-2"><span className="badge bg-teal-soft text-teal">태양광 진단 연동</span><span className="text-xs text-slate-400">{solarProfile.location}</span></div><div className="mt-3 text-lg font-extrabold">판매 가능한 잉여 전력을 주문에 바로 반영하세요</div><div className="mt-1 text-xs text-slate-500">{solarProfile.panelCount}장 · {solarProfile.systemKw}kW 설비 기준 연 {number(solarProfile.annualGen)}kWh 발전 예상</div></div>
+            <div className="grid grid-cols-2 gap-px bg-slate-100 lg:min-w-[390px]"><div className="bg-white p-5"><div className="text-xs text-slate-400">월 평균 잉여 전력</div><div className="mt-1 text-2xl font-black text-blue-600">{number(solarProfile.surplus / 12)}kWh</div></div><div className="bg-white p-5"><button type="button" onClick={() => { const sellable = Math.max(1, Math.min(Math.floor(funds.energy), Math.floor(solarProfile.surplus / 12))); setSide("sell"); setQuantity(String(sellable)); setNotice(`태양광 진단과 현재 보유량을 기준으로 ${number(sellable)}kWh를 판매 수량에 반영했습니다.`); }} className="btn-primary h-full w-full">판매 주문에 적용</button></div></div>
+          </div>
+        </section>
+      ) : (
+        <section className="card flex flex-wrap items-center justify-between gap-3 p-5"><div><div className="font-bold">내 태양광 발전량을 먼저 계산해 보세요</div><div className="mt-1 text-xs text-slate-400">진단 결과의 잉여 전력을 거래 주문 수량으로 자동 연결할 수 있습니다.</div></div><Link href="/solar" className="btn-amber">태양광 진단 시작</Link></section>
+      )}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="구매 가능 금액" value={won(funds.cash)} sub={`주문 예약 ${won(funds.reservedCash)}`} />
         <Metric label="판매 가능 전력" value={`${number(funds.energy)} kWh`} sub={`주문 예약 ${number(funds.reservedEnergy)} kWh`} />

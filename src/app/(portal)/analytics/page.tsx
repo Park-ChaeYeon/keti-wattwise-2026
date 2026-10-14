@@ -28,32 +28,11 @@ const AMBER = "#E39A00";
 const TEAL = "#0A9AA8";
 const INK = "#1F2328";
 
-const APPLIANCE_ICONS: Record<string, string> = { tv: "📺", 에어컨: "❄️", 제습기: "💧", 세탁기: "🧺" };
-const HOUSEHOLD: Record<string, string> = { 정빈: "1인가구", 진규: "1인가구", 채연: "4인가구" };
-
-type ApplianceMeta = { id: string; label: string; seriesIds: string[] };
-type ForecastPoint = { timestamp: string; actual?: number; prediction_kwh?: number; "0.1"?: number; "0.5"?: number; "0.9"?: number };
-type ForecastResult = { seriesId: string; elapsedSeconds: number; history: ForecastPoint[]; forecast: ForecastPoint[] };
-type ForecastState = { loading: boolean; error?: string; data?: ForecastResult };
 type BenchmarkHouse = { id: string; label: string; start: string; split: string; type: string; area: string; channels: number; dailyAverage: number; values: number[] };
 type HouseholdMeta = { id: string; type: string; area: string; city: string; start: string; end: string; rows: number; split?: string };
 
-function buildApplianceChartData(result: ForecastResult) {
-  const history = result.history.slice(-48).map((point) => ({ t: point.timestamp, actual: point.actual, pred: null as number | null, lo: null as number | null, hi: null as number | null }));
-  const last = history.at(-1);
-  const forecast = result.forecast.map((point) => {
-    const p = point["0.5"] ?? point.prediction_kwh ?? 0;
-    return { t: point.timestamp, actual: null as number | null, pred: p, lo: point["0.1"] ?? p, hi: point["0.9"] ?? p };
-  });
-  return last ? [...history, { ...last, pred: last.actual ?? null, lo: last.actual ?? null, hi: last.actual ?? null }, ...forecast] : forecast;
-}
-
 export default function AnalyticsPage() {
   const [monthKwh, setMonthKwh] = useState(366);
-  const [appliances, setAppliances] = useState<ApplianceMeta[]>([]);
-  const [selectedAppliance, setSelectedAppliance] = useState("");
-  const [selectedSeries, setSelectedSeries] = useState("");
-  const [forecast, setForecast] = useState<ForecastState>({ loading: true });
   const [households, setHouseholds] = useState<HouseholdMeta[]>([]);
   const [selectedHousehold, setSelectedHousehold] = useState("");
   const [householdForecast, setHouseholdForecast] = useState<{ loading: boolean; error?: string }>({ loading: true });
@@ -63,48 +42,12 @@ export default function AnalyticsPage() {
   const [toDay, setToDay] = useState(31);
 
   useEffect(() => {
-    fetch("/api/deploy/forecast")
-      .then((res) => res.json())
-      .then((data: { appliances: ApplianceMeta[] }) => {
-        const list = data.appliances ?? [];
-        setAppliances(list);
-        setSelectedAppliance(list[0]?.id ?? "");
-        setSelectedSeries(list[0]?.seriesIds[0] ?? "");
-      })
-      .catch(() => setForecast({ loading: false, error: "실측 목록을 불러오지 못했습니다." }));
-  }, []);
-
-  useEffect(() => {
-    if (!selectedAppliance || !selectedSeries) return;
-    let cancelled = false;
-    setForecast({ loading: true });
-    fetch("/api/deploy/forecast", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ appliance: selectedAppliance, seriesId: selectedSeries }),
-    })
-      .then((res) => res.json())
-      .then((result: ForecastResult & { error?: string }) => {
-        if (cancelled) return;
-        setForecast(result.error ? { loading: false, error: result.error } : { loading: false, data: result });
-      })
-      .catch((e: Error) => {
-        if (cancelled) return;
-        setForecast({ loading: false, error: e.message });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedAppliance, selectedSeries]);
-
-  useEffect(() => {
     fetch("/api/household-forecast")
       .then((res) => res.json())
       .then((data: { houses?: HouseholdMeta[]; error?: string }) => {
         if (data.error) throw new Error(data.error);
         const list = data.houses ?? [];
         setHouseholds(list);
-        setSelectedHousehold(list[0]?.id ?? "");
       })
       .catch((error: Error) => setHouseholdForecast({ loading: false, error: error.message }));
   }, []);
@@ -136,22 +79,12 @@ export default function AnalyticsPage() {
       .then((data: { houses?: BenchmarkHouse[] }) => {
         const houses = data.houses ?? [];
         setBenchmark(houses);
-        setBenchmarkId(houses[0]?.id ?? "");
+        const selected = houses[Math.floor(Math.random() * houses.length)];
+        setBenchmarkId(selected?.id ?? "");
+        setSelectedHousehold(selected?.id ?? "");
       })
       .catch(() => setBenchmark([]));
   }, []);
-
-  const activeAppliance = appliances.find((a) => a.id === selectedAppliance);
-  const orderedHouseholds = useMemo(() => [...households].sort((a, b) => {
-    const numberOf = (id: string) => Number(id.match(/\d+/)?.[0] ?? Number.MAX_SAFE_INTEGER);
-    return numberOf(a.id) - numberOf(b.id);
-  }), [households]);
-
-  function chooseAppliance(id: string) {
-    const next = appliances.find((a) => a.id === id);
-    setSelectedAppliance(id);
-    setSelectedSeries(next?.seriesIds[0] ?? "");
-  }
 
   const b = bill(monthKwh);
   const tier = tierOf(monthKwh);
@@ -192,13 +125,10 @@ export default function AnalyticsPage() {
         <h1 className="section-title">🔋 전력 분석 대시보드</h1>
       </div>
 
-      {/* 가정 선택 */}
-      <section className="card flex flex-wrap items-end gap-4 p-5">
-        <label className="min-w-[260px] flex-1"><span className="label">가정 선택</span><select className="input" value={selectedHousehold} onChange={(e) => setSelectedHousehold(e.target.value)} disabled={!households.length}>
-          {orderedHouseholds.map((house) => <option key={house.id} value={house.id}>{house.id.replace(/^house_/, "가구 ").replace(/^H0*/, "가구 ")} · {house.type}</option>)}
-        </select></label>
-        <div className="text-xs text-slate-500">{households.find((house) => house.id === selectedHousehold)?.area ?? "가정 목록을 불러오는 중"}</div>
-        <div className={`text-xs ${householdForecast.error ? "text-danger" : "text-slate-400"}`}>{householdForecast.loading ? "Chronos-2 예측 중…" : householdForecast.error ?? "최근 실측 기반 예측 완료"}</div>
+      {/* 자동 선택된 분석 대상 */}
+      <section className="card flex flex-wrap items-center justify-between gap-4 p-5">
+        <div><div className="text-xs font-bold uppercase tracking-[0.14em] text-teal">Selected household</div><div className="mt-1 text-lg font-black">{selectedHousehold ? selectedHousehold.replace(/^house_/, "가구 ").replace(/^H0*/, "가구 ") : "가구 데이터를 불러오는 중"}</div><div className="mt-1 text-xs text-slate-500">{households.find((house) => house.id === selectedHousehold)?.type} · {households.find((house) => house.id === selectedHousehold)?.area}</div></div>
+        <div className={`badge ${householdForecast.error ? "bg-danger-soft text-danger" : "bg-teal-soft text-teal"}`}>{householdForecast.loading ? "Chronos-2 분석 중…" : householdForecast.error ?? "최근 실측 기반 분석 완료"}</div>
       </section>
 
       {/* KPI */}
@@ -271,15 +201,12 @@ export default function AnalyticsPage() {
       <section className="space-y-4">
         <div>
           <h2 className="section-title">📊 탐색적 데이터 분석 (EDA)</h2>
-          <p className="mt-1 text-sm text-slate-500">개발 과정의 AI Hub 벤치마크 실측 데이터(89가구)를 선택한 기간으로 분석합니다.</p>
+          <p className="mt-1 text-sm text-slate-500">자동 선택된 가구의 실측 데이터를 기간별·시간대별로 분석합니다.</p>
         </div>
-        <div className="card grid gap-4 p-5 md:grid-cols-[1.4fr_1fr_1fr]">
-          <label><span className="label">가구 선택</span><select className="input" value={benchmarkId} onChange={(e) => setBenchmarkId(e.target.value)} disabled={!benchmark.length}>
-            {benchmark.map((house) => <option key={house.id} value={house.id}>{house.label} · {house.type}{house.split === "cold" ? " · 콜드스타트" : ""}</option>)}
-          </select></label>
+        <div className="card grid gap-4 p-5 md:grid-cols-2">
           <label><span className="label">시작일 · {fromDay}일차</span><input className="w-full accent-ink" type="range" min={1} max={31} value={fromDay} onChange={(e) => setFromDay(+e.target.value)} /></label>
           <label><span className="label">종료일 · {toDay}일차</span><input className="w-full accent-ink" type="range" min={1} max={31} value={toDay} onChange={(e) => setToDay(+e.target.value)} /></label>
-          {selectedBenchmark && <div className="text-xs text-slate-400 md:col-span-3">{selectedBenchmark.label} · {selectedBenchmark.area} · 채널 {selectedBenchmark.channels}개 · 측정 시작 {selectedBenchmark.start} · 현재 {Math.min(fromDay, toDay)}~{Math.max(fromDay, toDay)}일차 선택</div>}
+          {selectedBenchmark && <div className="text-xs text-slate-400 md:col-span-2">{selectedBenchmark.label} · {selectedBenchmark.area} · 채널 {selectedBenchmark.channels}개 · 측정 시작 {selectedBenchmark.start} · 현재 {Math.min(fromDay, toDay)}~{Math.max(fromDay, toDay)}일차 선택</div>}
         </div>
         {!eda ? <div className="card p-8 text-center text-sm text-slate-400">실측 벤치마크 데이터를 불러오는 중입니다…</div> : <>
         <div className="grid gap-4 lg:grid-cols-2">
@@ -341,75 +268,6 @@ export default function AnalyticsPage() {
         </div>
         <div className="text-xs text-slate-400">총 {eda.values.length.toLocaleString()}시간 · 선택 기간 합계 {eda.values.reduce((a, v) => a + v, 0).toFixed(1)}kWh</div>
         </>}
-      </section>
-
-      {/* 가전별 예측 */}
-      <section className="card p-5">
-        <div className="text-sm font-bold">가전별 사용량 예측 · Chronos-2 (자취방 실측)</div>
-        <div className="mt-1 text-xs text-slate-400">최근 48시간 실측(진한 선) + 향후 24시간 예측(주황 점선·10–90% 불확실성 밴드)</div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          {appliances.map((a) => (
-            <button
-              key={a.id}
-              onClick={() => chooseAppliance(a.id)}
-              className={`rounded-xl border px-3 py-2 text-sm transition ${selectedAppliance === a.id ? "border-amber bg-amber-soft font-bold text-ink" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
-            >
-              <span className="mr-1.5">{APPLIANCE_ICONS[a.id]}</span>
-              {a.id === "tv" ? "TV" : a.id}
-            </button>
-          ))}
-        </div>
-
-        {activeAppliance && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {activeAppliance.seriesIds.map((sid) => {
-              const person = sid.split("_")[0];
-              return (
-                <button
-                  key={sid}
-                  onClick={() => setSelectedSeries(sid)}
-                  className={`rounded-lg border px-2.5 py-1.5 text-xs transition ${selectedSeries === sid ? "border-teal bg-teal-soft font-bold text-teal" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}
-                >
-                  {person} · {HOUSEHOLD[person] ?? "가구 정보 없음"}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="mt-4 rounded-xl border border-slate-200 p-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-bold">
-              <span className="mr-1.5">{APPLIANCE_ICONS[selectedAppliance]}</span>
-              {selectedAppliance === "tv" ? "TV" : selectedAppliance}
-            </div>
-            {forecast.data && <div className="text-[11px] text-slate-400">{forecast.data.seriesId} · 추론 {forecast.data.elapsedSeconds.toFixed(1)}초</div>}
-          </div>
-          <div className="mt-2 h-64">
-            {forecast.loading ? (
-              <div className="flex h-full items-center justify-center text-xs text-slate-400">
-                <span className="mr-2 h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-500" />
-                모델 예측 중… (첫 실행은 로딩으로 시간이 걸릴 수 있어요)
-              </div>
-            ) : forecast.error ? (
-              <div className="flex h-full items-center justify-center px-3 text-center text-xs text-danger">{forecast.error}</div>
-            ) : forecast.data ? (
-              <ResponsiveContainer>
-                <ComposedChart data={buildApplianceChartData(forecast.data)} margin={{ left: -8, right: 8, top: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" />
-                  <XAxis dataKey="t" hide />
-                  <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} width={46} tickFormatter={(v) => v.toFixed(2)} />
-                  <Tooltip formatter={(v) => (typeof v === "number" ? `${v.toFixed(3)}kWh` : "-")} />
-                  <Area dataKey="lo" stroke="none" fill="transparent" isAnimationActive={false} />
-                  <Area dataKey="hi" stroke="none" fill={AMBER} fillOpacity={0.14} isAnimationActive={false} />
-                  <Line dataKey="actual" stroke={INK} strokeWidth={2.5} dot={false} name="실측" isAnimationActive={false} />
-                  <Line dataKey="pred" stroke={AMBER} strokeWidth={2.5} strokeDasharray="5 4" dot={false} name="예측" isAnimationActive={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            ) : null}
-          </div>
-        </div>
       </section>
 
     </div>

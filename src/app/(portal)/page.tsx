@@ -54,17 +54,6 @@ function HeroArt({ h = "h-72 md:h-80 lg:h-96" }: { h?: string }) {
   );
 }
 
-function Photo({ label, h = "h-44" }: { label: string; h?: string }) {
-  return (
-    <div className={`flex ${h} w-full items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-center text-sm text-slate-400`}>
-      <div>
-        <div className="text-2xl">📷</div>
-        <div className="mt-1">{label}</div>
-      </div>
-    </div>
-  );
-}
-
 function CardWatermark({ variant }: { variant: "clock" | "sun" | "data" }) {
   const cls = "pointer-events-none absolute -right-5 -bottom-5 h-32 w-32 opacity-[0.07]";
   if (variant === "clock") {

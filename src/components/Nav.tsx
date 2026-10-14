@@ -6,11 +6,10 @@ import { usePathname } from "next/navigation";
 import { logout } from "@/app/login/actions";
 
 const LINKS = [
-  { href: "/chat", label: "챗봇" },
   { href: "/why", label: "소개" },
-  { href: "/analytics", label: "전력 대시보드" },
+  { href: "/chat", label: "챗봇" },
+  { href: "/analytics", label: "전력·스마트홈" },
   { href: "/solar", label: "태양광·거래" },
-  { href: "/households", label: "스마트홈 진단" },
 ];
 
 // 개발 과정 — 드롭다운으로 묶는 하위 페이지
@@ -36,6 +35,8 @@ export default function Nav({ user }: { user: { name: string; role: string } }) 
         <nav className="order-3 flex w-full flex-wrap items-center gap-0.5 lg:order-none lg:w-auto lg:flex-1">
           {LINKS.map((l) => l.href === "/solar" ? (
             <NavDropdown key={l.href} label="태양광·거래" links={[{ href: "/solar", label: "태양광" }, { href: "/trade", label: "거래" }]} path={path} />
+          ) : l.href === "/analytics" ? (
+            <NavDropdown key={l.href} label="전력·스마트홈" links={[{ href: "/analytics", label: "전력 대시보드" }, { href: "/households", label: "스마트홈 진단" }]} path={path} />
           ) : (
             <Link
               key={l.href}
