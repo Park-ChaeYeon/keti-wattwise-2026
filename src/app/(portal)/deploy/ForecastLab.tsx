@@ -11,16 +11,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import type { ApplianceSummary as Appliance, ForecastPoint as Point } from "@/features/deploy/types";
 
-type Appliance = {
-  id: string;
-  label: string;
-  seriesIds: string[];
-  rows: number;
-  periodStart: string;
-  periodEnd: string;
-};
-type Point = { timestamp: string; actual?: number; prediction_kwh?: number; "0.1"?: number; "0.5"?: number; "0.9"?: number };
 type Result = {
   appliance: string;
   seriesId: string;

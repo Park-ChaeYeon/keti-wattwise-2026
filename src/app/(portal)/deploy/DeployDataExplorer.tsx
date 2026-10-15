@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Area, Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import type { ApplianceSummary as Appliance, MeasuredPoint as Point } from "@/features/deploy/types";
 
-type Appliance = { id: string; label: string; seriesIds: string[]; rows: number; periodStart: string; periodEnd: string };
-type Point = { timestamp: string; kwh: number; coverage: number };
 const ICONS: Record<string, string> = { tv: "📺", 에어컨: "❄️", 제습기: "💧", 세탁기: "🧺" };
 const TEAL = "#0A9AA8";
 const AMBER = "#E39A00";
@@ -42,16 +41,19 @@ export default function DeployDataExplorer() {
   const selected = appliances.find((item) => item.id === appliance);
   const summary = useMemo(() => {
     if (!points.length) return null;
-    const total = points.reduce((sum, point) => sum + point.kwh, 0);
-    const average = total / points.length;
-    const peak = points.reduce((best, point) => point.kwh > best.kwh ? point : best, points[0]);
-    const coverage = points.reduce((sum, point) => sum + point.coverage, 0) / points.length * 100;
+    const validPoints = points.filter((point): point is Point & { kwh: number } => point.kwh !== null);
+    if (!validPoints.length) return null;
+    const total = validPoints.reduce((sum, point) => sum + point.kwh, 0);
+    const average = total / validPoints.length;
+    const peak = validPoints.reduce((best, point) => point.kwh > best.kwh ? point : best, validPoints[0]);
+    const coverageValues = points.flatMap((point) => point.coverage === null ? [] : [point.coverage]);
+    const coverage = coverageValues.reduce((sum, value) => sum + value, 0) / Math.max(1, coverageValues.length) * 100;
     const hourly = Array.from({ length: 24 }, (_, hour) => {
-      const values = points.filter((point) => new Date(point.timestamp).getHours() === hour);
+      const values = validPoints.filter((point) => new Date(point.timestamp).getHours() === hour);
       return { hour: `${hour}시`, kwh: values.reduce((sum, point) => sum + point.kwh, 0) / Math.max(1, values.length) };
     });
     const dailyMap = new Map<string, number>();
-    points.forEach((point) => { const day = point.timestamp.slice(0, 10); dailyMap.set(day, (dailyMap.get(day) ?? 0) + point.kwh); });
+    validPoints.forEach((point) => { const day = point.timestamp.slice(0, 10); dailyMap.set(day, (dailyMap.get(day) ?? 0) + point.kwh); });
     const daily = Array.from(dailyMap.entries()).map(([day, kwh]) => ({ day: day.slice(5), kwh }));
     return { total, average, peak, coverage, hourly, daily };
   }, [points]);
@@ -74,7 +76,7 @@ export default function DeployDataExplorer() {
         <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1.4fr]">
           <div><span className="label">측정 가전</span><div className="grid grid-cols-2 gap-2">{appliances.map((item) => <button key={item.id} onClick={() => chooseAppliance(item.id)} className={`rounded-xl border px-3 py-2 text-left text-sm ${appliance === item.id ? "border-teal bg-teal-soft font-bold text-teal" : "border-slate-200"}`}>{ICONS[item.id]} {item.label}</button>)}</div></div>
           <label><span className="label">실증 대상</span><select className="input" value={seriesId} onChange={(e) => setSeriesId(e.target.value)}>{(selected?.seriesIds ?? []).map((id) => <option key={id} value={id}>{id.replace("_tv", "_TV")}</option>)}</select></label>
-          <div className="rounded-xl bg-[#11191d] p-4 text-xs leading-6 text-white/55">{selected ? <><b className="text-white">선택 데이터의 이력</b><br />{selected.periodStart.slice(0, 10)} — {selected.periodEnd.slice(0, 10)} · 전체 {selected.rows.toLocaleString()}시간<br /><span className="text-[#63dbe3]">수집률·결측 플래그까지 함께 관리</span></> : "데이터를 불러오는 중입니다."}</div>
+          <div className="rounded-xl bg-[#11191d] p-4 text-xs leading-6 text-white/55">{selected ? <><b className="text-white">선택 데이터의 이력</b><br />{selected.periodStart.slice(0, 10)} — {selected.periodEnd.slice(0, 10)} · 전체 {(selected.seriesRows?.[seriesId] ?? selected.rows).toLocaleString()}시간<br /><span className="text-[#63dbe3]">수집률·결측 플래그까지 함께 관리</span></> : "데이터를 불러오는 중입니다."}</div>
         </div>
       </div>
 

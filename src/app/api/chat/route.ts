@@ -1,13 +1,10 @@
-import { execFile } from "node:child_process";
-import path from "node:path";
-import { promisify } from "node:util";
 import { NextResponse } from "next/server";
-import { pythonExecutable } from "@/lib/pythonRuntime";
+import { APPLIANCE_IDS, type ApplianceId } from "@/features/appliances/config";
+import { errorDetail, runPythonJson } from "@/server/python";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const execFileAsync = promisify(execFile);
 const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://localhost:11434";
 const MODEL = process.env.WATTWISE_CHAT_MODEL ?? "qwen2.5:1.5b";
 
@@ -27,9 +24,7 @@ const SYSTEM_PROMPT = `당신은 WattWise Pi 프로젝트를 설명하는 도우
 
 type ChatMsg = { role: "user" | "assistant" | "system"; content: string };
 
-const APPLIANCES = ["tv", "에어컨", "제습기", "세탁기"] as const;
-type Appliance = (typeof APPLIANCES)[number];
-const APPLIANCE_ALIASES: Record<string, Appliance> = {
+const APPLIANCE_ALIASES: Record<string, ApplianceId> = {
   tv: "tv",
   티비: "tv",
   텔레비전: "tv",
@@ -46,7 +41,7 @@ const APPLIANCE_ALIASES: Record<string, Appliance> = {
 const HOUSEHOLD: Record<string, string> = { 정빈: "1인가구", 진규: "1인가구", 채연: "4인가구" };
 const PEOPLE = Object.keys(HOUSEHOLD);
 
-function detectAppliance(text: string): Appliance | null {
+function detectAppliance(text: string): ApplianceId | null {
   for (const [alias, id] of Object.entries(APPLIANCE_ALIASES)) {
     if (text.includes(alias)) return id;
   }
@@ -77,23 +72,20 @@ type UsageSummary = {
   peakTime?: string;
 };
 
-async function fetchUsageSummary(appliance: Appliance, seriesId: string): Promise<UsageSummary> {
-  const root = process.cwd();
-  const python = await pythonExecutable(root);
-  const script = path.join(root, "dashboard", "usage_summary.py");
-  const { stdout } = await execFileAsync(
-    python,
-    [script, "--appliance", appliance, "--series-id", seriesId],
-    { cwd: path.join(root, "dashboard"), timeout: 15_000 },
-  );
-  return JSON.parse(stdout.trim()) as UsageSummary;
+async function fetchUsageSummary(appliance: ApplianceId, seriesId: string): Promise<UsageSummary> {
+  return runPythonJson<UsageSummary>({
+    cwd: "dashboard",
+    script: "usage_summary.py",
+    args: ["--appliance", appliance, "--series-id", seriesId],
+    timeout: 15_000,
+  });
 }
 
 const WANTS_USAGE = /사용량|전력|얼마|kwh/i;
 
 async function fetchAllApplianceSummaries(person: string) {
   const results = await Promise.all(
-    APPLIANCES.map(async (appliance) => {
+    APPLIANCE_IDS.map(async (appliance) => {
       try {
         const summary = await fetchUsageSummary(appliance, `${person}_${appliance}`);
         return summary.error ? null : { appliance, summary };
@@ -103,7 +95,7 @@ async function fetchAllApplianceSummaries(person: string) {
       }
     }),
   );
-  return results.filter((r): r is { appliance: Appliance; summary: UsageSummary } => r !== null);
+  return results.filter((r): r is { appliance: ApplianceId; summary: UsageSummary } => r !== null);
 }
 
 export async function POST(request: Request) {
@@ -182,7 +174,7 @@ ${breakdown}`,
 
     return NextResponse.json({ reply });
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
+    const detail = errorDetail(error);
     const connectionRefused = /ECONNREFUSED|fetch failed/i.test(detail);
     return NextResponse.json(
       {

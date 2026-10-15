@@ -1,8 +1,8 @@
 {
-  "model": "/Users/jungbin/Desktop/project/keti/household_chronos2/checkpoint",
+  "model": "household_chronos2/checkpoint",
   "device": "cpu",
   "mode": "zero-shot rolling day-ahead evaluation with known-future calendar covariates",
-  "validation_data": "/Users/jungbin/Desktop/project/keti/household_chronos2/data/hourly_base.parquet",
+  "validation_data": "household_chronos2/data/hourly_base.parquet",
   "context_source": "observed target values from the same Validation house before each forecast origin",
   "covariate_source": "timestamp-derived known-future calendar features only",
   "covariates": [

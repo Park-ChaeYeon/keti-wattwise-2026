@@ -9,21 +9,16 @@ import time
 
 import pandas as pd
 
-from inference import APPLIANCES, ROOT, forecast
+try:
+    from .data_store import APPLIANCES, load_model_series
+    from .inference import forecast
+except ImportError:  # Direct execution: python dashboard/web_inference.py
+    from data_store import APPLIANCES, load_model_series
+    from inference import forecast
 
 
 def load_history(appliance: str, series_id: str, length: int) -> pd.DataFrame:
-    data_path = ROOT / "data" / appliance / "chronos_model_input.parquet"
-    data = pd.read_parquet(data_path)
-    data["timestamp"] = pd.to_datetime(data["timestamp"], errors="coerce")
-    data["target_kwh"] = pd.to_numeric(data["target_kwh"], errors="coerce")
-    return (
-        data[data["house_id"].astype(str).eq(series_id)]
-        .dropna(subset=["timestamp", "target_kwh"])
-        .sort_values("timestamp")
-        .drop_duplicates("timestamp", keep="last")
-        .tail(length)[["timestamp", "target_kwh"]]
-    )
+    return load_model_series(appliance, series_id).tail(length)[["timestamp", "target_kwh"]]
 
 
 def records(frame: pd.DataFrame) -> list[dict]:

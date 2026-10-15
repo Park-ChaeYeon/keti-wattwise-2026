@@ -9,12 +9,11 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
-import pandas as pd
-
-ROOT = Path(__file__).resolve().parent
-APPLIANCES = ("tv", "에어컨", "제습기", "세탁기")
+try:
+    from .data_store import APPLIANCES, load_model_series
+except ImportError:  # Direct execution: python dashboard/usage_summary.py
+    from data_store import APPLIANCES, load_model_series
 
 
 def main() -> None:
@@ -23,15 +22,7 @@ def main() -> None:
     parser.add_argument("--series-id", required=True)
     args = parser.parse_args()
 
-    data_path = ROOT / "data" / args.appliance / "chronos_model_input.parquet"
-    data = pd.read_parquet(data_path)
-    data["timestamp"] = pd.to_datetime(data["timestamp"], errors="coerce")
-    data["target_kwh"] = pd.to_numeric(data["target_kwh"], errors="coerce")
-    series = (
-        data[data["house_id"].astype(str).eq(args.series_id)]
-        .dropna(subset=["timestamp", "target_kwh"])
-        .sort_values("timestamp")
-    )
+    series = load_model_series(args.appliance, args.series_id)
     if series.empty:
         print(json.dumps({"error": f"'{args.series_id}' 실측 데이터를 찾을 수 없습니다."}, ensure_ascii=False))
         return

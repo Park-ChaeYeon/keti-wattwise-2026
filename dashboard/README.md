@@ -8,6 +8,9 @@
 
 ```text
 dashboard/
+├── data_store.py
+├── measurement_pipeline.py
+├── series_export.py
 ├── inference.py
 ├── requirements.txt
 ├── data/<가전>/
@@ -32,6 +35,30 @@ python3 -m venv .venv-dashboard
 프로젝트 웹사이트는 `.venv-dashboard/bin/python`이 있으면 자동으로 이 환경을
 사용한다. 다른 Python을 사용하려면 웹 서버를 실행하기 전에
 `WATTWISE_PYTHON=/path/to/python`을 지정한다.
+
+## 실측 CSV 전처리
+
+원본 CSV는 저장소에 커밋하지 않고 로컬 `실측 2/` 폴더에 둔다. 다음 명령은
+폴더 이름(`<사용자>_<가전>`)과 CSV 스키마·가구ID·채널ID·중복 시각을 검증한
+뒤, 분 단위 전력량을 시간 단위 Parquet으로 변환한다. 모든 입력 검증이 끝난
+후 임시 파일을 원자적으로 교체하므로 실패 시 기존 Parquet을 보존한다.
+
+```bash
+.venv-dashboard/bin/python dashboard/measurement_pipeline.py \
+  --source "실측 2"
+```
+
+일부 가전만 다시 만들 수도 있다.
+
+```bash
+.venv-dashboard/bin/python dashboard/measurement_pipeline.py \
+  --source "실측 2" \
+  --appliance tv \
+  --appliance 세탁기
+```
+
+시간당 유효 분 데이터가 80% 미만이면 `low_coverage=1`로 표시하고 모델 입력에서
+제외한다. 임계값은 `--minimum-hourly-coverage`로 조정할 수 있다.
 
 ## 미래 24시간 예측
 

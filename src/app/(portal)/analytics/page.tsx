@@ -23,13 +23,15 @@ import {
   applianceBreakdown,
   won,
 } from "@/lib/domain";
+import {
+  buildBenchmarkAnalysis,
+  type BenchmarkHouse,
+  type HouseholdMeta,
+} from "@/features/analytics/benchmark";
 
 const AMBER = "#E39A00";
 const TEAL = "#0A9AA8";
 const INK = "#1F2328";
-
-type BenchmarkHouse = { id: string; label: string; start: string; split: string; type: string; area: string; channels: number; dailyAverage: number; values: number[] };
-type HouseholdMeta = { id: string; type: string; area: string; city: string; start: string; end: string; rows: number; split?: string };
 
 export default function AnalyticsPage() {
   const [monthKwh, setMonthKwh] = useState(366);
@@ -92,32 +94,10 @@ export default function AnalyticsPage() {
   const nxt = daysToNextTier(monthKwh, dailyAvg);
   const appl = useMemo(() => applianceBreakdown(monthKwh), [monthKwh]);
   const selectedBenchmark = benchmark.find((house) => house.id === benchmarkId);
-  const eda = useMemo(() => {
-    if (!selectedBenchmark) return null;
-    const start = Math.max(1, Math.min(31, Math.min(fromDay, toDay)));
-    const end = Math.max(start, Math.min(31, Math.max(fromDay, toDay)));
-    const values = selectedBenchmark.values.slice((start - 1) * 24, end * 24);
-    const hourly = Array.from({ length: 24 }, (_, hour) => {
-      const points = values.filter((_, i) => i % 24 === hour);
-      return { hour: `${hour}시`, kwh: points.length ? points.reduce((a, v) => a + v, 0) / points.length : 0 };
-    });
-    const weekdayNames = ["월", "화", "수", "목", "금", "토", "일"];
-    const weekday = weekdayNames.map((day, index) => {
-      const points = values.filter((_, i) => (start - 1 + Math.floor(i / 24)) % 7 === index);
-      return { day, kwh: points.reduce((a, v) => a + v, 0) / Math.max(1, points.length) * 24 };
-    });
-    const daily = Array.from({ length: end - start + 1 }, (_, i) => {
-      const day = start + i;
-      const points = selectedBenchmark.values.slice((day - 1) * 24, day * 24);
-      return { day: `${day}일`, kwh: points.reduce((a, v) => a + v, 0) };
-    });
-    const heat = weekdayNames.map((day, dayIndex) => Array.from({ length: 24 }, (_, hour) => {
-      const points = values.filter((_, i) => Math.floor(i / 24) % 7 === dayIndex && i % 24 === hour);
-      const kwh = points.length ? points.reduce((a, v) => a + v, 0) / points.length : 0;
-      return { day, hour, v: kwh };
-    }));
-    return { start, end, values, hourly, weekday, daily, heat };
-  }, [selectedBenchmark, fromDay, toDay]);
+  const eda = useMemo(
+    () => buildBenchmarkAnalysis(selectedBenchmark, fromDay, toDay),
+    [selectedBenchmark, fromDay, toDay],
+  );
 
   return (
     <div className="space-y-8">

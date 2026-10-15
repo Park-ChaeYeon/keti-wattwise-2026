@@ -16,13 +16,15 @@ import {
   RadialBar,
   PolarAngleAxis,
 } from "recharts";
-import {
-  CITIES,
-  TARGETS,
-  simulate,
-  type SolarPVInput,
-} from "@/lib/solarpv";
+import { CITIES } from "@/lib/solarpv";
 import { won } from "@/lib/domain";
+import {
+  calculateSolarPlan,
+  type HomeType,
+  type Orientation,
+  type RoofCondition,
+  type UsagePattern,
+} from "@/features/solar/calculator";
 import dynamic from "next/dynamic";
 import type { SearchedBuilding, SelectedSolarBuilding } from "@/components/BuildingSolarMap";
 
@@ -39,12 +41,12 @@ const OK = "#12A150";
 
 export default function SolarPage() {
   const [cityIdx, setCityIdx] = useState(0);
-  const [homeType, setHomeType] = useState<"apartment" | "villa" | "house">("house");
+  const [homeType, setHomeType] = useState<HomeType>("house");
   const [areaPyeong, setAreaPyeong] = useState(30);
   const [residents, setResidents] = useState(3);
-  const [usagePattern, setUsagePattern] = useState<"low" | "normal" | "high">("normal");
-  const [roofCondition, setRoofCondition] = useState<"good" | "partial" | "limited">("good");
-  const [orientation, setOrientation] = useState<"south" | "southeast" | "east" | "flat">("south");
+  const [usagePattern, setUsagePattern] = useState<UsagePattern>("normal");
+  const [roofCondition, setRoofCondition] = useState<RoofCondition>("good");
+  const [orientation, setOrientation] = useState<Orientation>("south");
   const [knownMonthlyKwh, setKnownMonthlyKwh] = useState("");
   const [sellPerKwh, setSellPerKwh] = useState(130);
   const [subsidyOn, setSubsidyOn] = useState(true);
@@ -54,64 +56,19 @@ export default function SolarPage() {
   const [searchState, setSearchState] = useState<"idle" | "loading" | "error">("idle");
   const [searchError, setSearchError] = useState("");
 
-  const t = TARGETS["가정"];
-  const city = CITIES[cityIdx];
-  const usageMultiplier = { low: 0.82, normal: 1, high: 1.25 }[usagePattern];
-  const estimatedMonthlyKwh = Math.round((95 + areaPyeong * 3.4 + residents * 42) * usageMultiplier);
-  const monthlyConsumption = Math.max(50, Number(knownMonthlyKwh) || estimatedMonthlyKwh);
-  const annualConsumption = monthlyConsumption * 12;
-  const roofFactor = { good: 0.9, partial: 0.65, limited: 0.4 }[roofCondition];
-  const installableArea = homeType === "house"
-    ? areaPyeong * 3.3058 * 0.42 * roofFactor
-    : homeType === "villa" ? 8.4 * roofFactor : 4.2 * roofFactor;
-  const maxPanels = Math.max(1, Math.floor(installableArea / 2.1));
-  const orientationSetting = {
-    south: { tilt: 30, azimuth: 0, label: "남향 경사지붕" },
-    southeast: { tilt: 25, azimuth: -30, label: "남동·남서향" },
-    east: { tilt: 25, azimuth: -90, label: "동·서향" },
-    flat: { tilt: 10, azimuth: 0, label: "평지붕" },
-  }[orientation];
-  const baseInput: SolarPVInput = {
-    lat: searchedPlace?.loc[1] ?? city.lat,
-    kt: city.kt,
-    systemKw: 1,
-    tilt: orientationSetting.tilt,
-    azimuth: orientationSetting.azimuth,
-    pr: 0.8,
-    consumptionYr: annualConsumption,
-    costPerKw: t.costPerKw,
-    subsidy: t.subsidy,
-    savePerKwh: 150,
-    sellPerKwh,
-    selfRate: { low: 0.38, normal: 0.52, high: 0.65 }[usagePattern],
-  };
-  const annualPerKw = simulate(baseInput).annualGen;
-  const targetPanels = Math.max(1, Math.ceil((annualConsumption * 0.85) / (annualPerKw * 0.45)));
-  const panelCount = Math.min(maxPanels, targetPanels);
-  const systemKw = +(panelCount * 0.45).toFixed(2);
-  const panelEquipmentCost = panelCount * (homeType === "apartment" ? 520_000 : 430_000);
-  const inverterCost = homeType === "apartment" ? 180_000 : Math.max(550_000, systemKw * 230_000);
-  const structureCost = Math.round(systemKw * (homeType === "house" ? 260_000 : 190_000));
-  const installationCost = homeType === "apartment" ? 220_000 : Math.round(420_000 + systemKw * 120_000);
-  const grossInstallCost = panelEquipmentCost + inverterCost + structureCost + installationCost;
-  const subsidyRate = homeType === "apartment" ? 0.45 : homeType === "villa" ? 0.42 : 0.5;
-  const estimatedSubsidy = subsidyOn ? Math.min(Math.round(grossInstallCost * subsidyRate), homeType === "apartment" ? 720_000 : 3_000_000) : 0;
-  const selfPay = grossInstallCost - estimatedSubsidy;
-  const inp: SolarPVInput = {
-    ...baseInput,
-    systemKw,
-    costPerKw: grossInstallCost / systemKw,
-    subsidy: estimatedSubsidy,
-  };
-  const r = simulate(inp);
-  const monthlySeason = [1.12, 1.03, 0.96, 0.9, 0.9, 1.05, 1.14, 1.14, 1.02, 0.92, 0.88, 0.94];
-  const monthlyEnergy = r.monthly.map((month, index) => ({ ...month, consumption: Math.round(monthlyConsumption * monthlySeason[index]) }));
-  const selfSaving = r.selfUsed * inp.savePerKwh;
-  const saleRevenue = r.surplus * sellPerKwh;
-  const gridUse = Math.max(0, annualConsumption - r.selfUsed);
-  const net25 = Math.round(r.annualRevenue * 23.8 - selfPay);
-  const buildingSaving = selectedBuilding ? Math.min(selectedBuilding.kwh, annualConsumption) * inp.savePerKwh : 0;
-  const buildingSavingRate = selectedBuilding ? Math.min(100, selectedBuilding.kwh / annualConsumption * 100) : 0;
+  const {
+    city, estimatedMonthlyKwh, monthlyConsumption, annualConsumption,
+    installableArea, maxPanels, orientationSetting, panelCount, systemKw,
+    panelEquipmentCost, inverterCost, structureCost, installationCost,
+    grossInstallCost, estimatedSubsidy, selfPay,
+    result: r, monthlyEnergy, selfSaving, saleRevenue, gridUse, net25,
+    buildingSaving, buildingSavingRate,
+  } = calculateSolarPlan({
+    cityIdx, homeType, areaPyeong, residents, usagePattern, roofCondition,
+    orientation, knownMonthlyKwh, sellPerKwh, subsidyOn,
+    searchedLocation: searchedPlace,
+    selectedBuilding,
+  });
 
   useEffect(() => {
     const profile = { version: 1, panelCount, systemKw, annualGen: r.annualGen, annualConsumption, selfUsed: r.selfUsed, surplus: r.surplus, annualRevenue: r.annualRevenue, location: searchedPlace?.label ?? city.name, updatedAt: new Date().toISOString() };
