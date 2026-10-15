@@ -1,38 +1,216 @@
-import Link from "next/link";
-
-export default function WhyPage() {
+function HeroBg() {
   return (
-    <div className="space-y-24 pb-12 md:space-y-28">
-      <section className="grid min-h-[650px] overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-pop lg:grid-cols-[1.02fr_0.98fr]">
-        <div className="flex flex-col justify-between p-8 md:p-12 lg:p-14">
-          <div className="flex items-center gap-3"><span className="h-2.5 w-2.5 rounded-full bg-teal" /><span className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Residential energy intelligence</span></div>
-          <div className="py-14"><h1 className="text-5xl font-black leading-[1.03] tracking-[-0.055em] text-ink md:text-6xl">Your home.<br />Your energy.<br /><span className="text-teal">Your decision.</span></h1><p className="mt-7 max-w-xl text-base leading-8 text-slate-500">WattWise는 가정의 전력 데이터를 예측 가능한 정보로 바꿉니다. 요금을 줄이고, 이상을 먼저 발견하고, 생산한 에너지를 더 가치 있게 사용하도록.</p><div className="mt-9 flex flex-wrap gap-3"><Link href="/households" className="btn-primary !rounded-full px-6 py-3">무료 진단 시작 <span>→</span></Link><Link href="/analytics" className="btn-ghost !rounded-full px-6 py-3">제품 살펴보기</Link></div></div>
-          <div className="flex flex-wrap gap-x-8 gap-y-3 border-t border-slate-100 pt-5 text-xs font-semibold text-slate-400"><span>ON-DEVICE AI</span><span>PRIVACY FIRST</span><span>ENERGY OS</span></div>
-        </div>
-        <div className="relative flex min-h-[560px] items-center justify-center overflow-hidden bg-[#11181c] p-6 md:p-10">
-          <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full bg-teal/25 blur-3xl" /><div className="absolute -bottom-32 -left-20 h-80 w-80 rounded-full bg-amber/20 blur-3xl" />
-          <div className="relative w-full max-w-[520px] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.07] p-5 shadow-2xl backdrop-blur md:p-6">
-            <div className="flex items-center justify-between"><div><div className="text-xs text-white/40">오늘의 에너지</div><div className="mt-1 text-lg font-bold text-white">우리 집은 안정적입니다</div></div><span className="rounded-full bg-teal/20 px-3 py-1 text-xs font-bold text-[#54dbe6]">LIVE</span></div>
-            <div className="mt-6 grid grid-cols-3 gap-2"><DarkStat label="현재 사용" value="1.8 kW" /><DarkStat label="오늘 예측" value="12.4 kWh" /><DarkStat label="태양광" value="+4.2 kWh" /></div>
-            <div className="mt-5 rounded-xl bg-black/20 p-4"><div className="flex items-center justify-between text-[11px] text-white/35"><span>24시간 전력 예측</span><span>현재 14:00</span></div><svg viewBox="0 0 440 150" className="mt-3 w-full" aria-hidden><defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#26c6d1" stopOpacity=".35" /><stop offset="1" stopColor="#26c6d1" stopOpacity="0" /></linearGradient></defs><path d="M0 126 C35 120 48 98 78 108 S125 133 154 92 S205 48 238 76 S281 119 315 83 S364 35 440 48 L440 150 L0 150Z" fill="url(#area)" /><path d="M0 126 C35 120 48 98 78 108 S125 133 154 92 S205 48 238 76 S281 119 315 83 S364 35 440 48" fill="none" stroke="#26c6d1" strokeWidth="3" /><path d="M0 132 C50 121 87 129 126 110 S187 87 230 99 S310 106 350 76 S405 58 440 65" fill="none" stroke="#E39A00" strokeWidth="2" strokeDasharray="5 6" opacity=".9" /></svg><div className="mt-2 flex justify-between text-[10px] text-white/25"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div></div>
-            <div className="mt-4 flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3"><div><div className="text-xs font-bold text-white">누진 구간 진입까지 86kWh</div><div className="mt-1 text-[10px] text-white/35">현재 추세로 약 9일 남았습니다</div></div><span className="text-xl text-amber">↗</span></div>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-12 rounded-[2rem] bg-white px-6 py-10 ring-1 ring-slate-200/80 md:px-10 md:py-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-teal">The problem</p><h2 className="mt-5 break-keep text-3xl font-black leading-[1.15] tracking-[-0.035em] md:text-4xl xl:text-5xl"><span className="whitespace-nowrap">데이터는 쌓이지만,</span><br /><span className="whitespace-nowrap">판단은 늦습니다.</span></h2></div><div className="border-t border-slate-200 pt-7 lg:border-l lg:border-t-0 lg:pl-12 lg:pt-0"><p className="break-keep text-xl font-semibold leading-9 text-ink">대부분의 가정은 한 달이 지나고 나서야 사용량과 요금을 확인합니다.</p><p className="mt-5 break-keep text-base leading-8 text-slate-500">WattWise는 이 시간을 앞으로 당깁니다. 다음 사용량을 예측하고, 평소와 다른 신호를 감지하고, 남는 태양광 전력을 계산합니다. 하나의 데이터가 비용·안전·거래라는 세 가지 결정으로 이어집니다.</p><div className="mt-9 grid grid-cols-3 gap-4 border-t border-slate-200 pt-7"><Number value="24h" label="수요 예측" /><Number value="3" label="통합 제품" /><Number value="0" label="필수 클라우드" /></div></div></section>
-
-      <section className="rounded-[2rem] bg-[#11181c] p-6 text-white md:p-10 lg:p-12"><div className="flex flex-wrap items-end justify-between gap-5"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-[#54dbe6]">WattWise platform</p><h2 className="mt-4 text-3xl font-black tracking-[-0.035em] md:text-5xl">One signal. Three decisions.</h2></div><p className="max-w-md text-sm leading-7 text-white/45">가정의 전력 신호를 세 개의 독립된 도구가 아니라 하나의 연속된 제품 경험으로 설계했습니다.</p></div><div className="mt-10 grid gap-3 lg:grid-cols-3"><Product href="/analytics" index="01" title="Forecast" ko="예측하다" color="text-[#54dbe6]" body="시간대별 수요와 확률 구간을 예측해 다음 누진 구간과 청구요금을 미리 확인합니다." metric="NEXT 24 HOURS" /><Product href="/households" index="02" title="Protect" ko="지켜보다" color="text-[#ff806d]" body="가구별 평소 패턴과 오늘의 편차를 비교해 이상 가전과 생활 신호를 빠르게 찾습니다." metric="PERSONAL BASELINE" /><Product href="/solar" index="03" title="Exchange" ko="연결하다" color="text-[#ffc95c]" body="주소와 주거 조건으로 발전량을 계산하고 잉여 전력을 거래 가능한 수량으로 연결합니다." metric="SOLAR TO MARKET" /></div></section>
-
-      <section className="grid overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-card lg:grid-cols-[0.9fr_1.1fr]"><div className="p-8 md:p-12"><p className="text-xs font-black uppercase tracking-[0.2em] text-teal">Edge by design</p><h2 className="mt-4 break-keep text-3xl font-black leading-tight tracking-[-0.035em] md:text-4xl">개인정보 보호는<br />부가 기능이 아닙니다.</h2><p className="mt-5 break-keep text-sm leading-7 text-slate-500">전력 사용량은 생활 시간표와 같습니다. 그래서 WattWise는 처음부터 데이터를 집 안에서 처리하는 구조로 설계했습니다.</p><div className="mt-8 space-y-5"><Check title="Local inference" body="예측과 이상탐지를 Raspberry Pi에서 실행" /><Check title="Personal baseline" body="다른 집 평균보다 우리 집의 평소를 우선" /><Check title="Minimum exposure" body="필요하지 않은 원시 데이터 외부 전송 최소화" /></div></div><div className="flex min-h-[430px] items-center justify-center bg-gradient-to-br from-[#121a1e] to-[#243137] p-7 md:p-10"><div className="w-full max-w-md"><div className="text-center text-xs font-bold uppercase tracking-[0.2em] text-white/35">Local energy pipeline</div><div className="mt-8 space-y-3"><FlowStep number="01" title="Measure" body="스마트미터 · CT 센서" color="bg-white/10" /><div className="mx-auto h-5 w-px bg-white/15" /><FlowStep number="02" title="Understand" body="개인화 예측 · 이상탐지" color="bg-teal/20" /><div className="mx-auto h-5 w-px bg-white/15" /><FlowStep number="03" title="Act" body="절감 · 안전 · 전력거래" color="bg-amber/20" /></div><div className="mt-7 text-center text-[11px] text-white/30">Raw household data stays at home</div></div></div></section>
-
-      <section className="relative overflow-hidden rounded-[2rem] bg-teal px-7 py-14 text-white md:px-12 md:py-20"><div className="absolute -right-20 -top-32 h-96 w-96 rounded-full border-[70px] border-white/10" /><div className="relative max-w-3xl"><p className="text-xs font-black uppercase tracking-[0.2em] text-white/55">Start now</p><h2 className="mt-5 text-4xl font-black leading-tight tracking-[-0.04em] md:text-6xl">우리 집 에너지를<br />먼저 이해해 보세요.</h2><p className="mt-5 max-w-xl text-sm leading-7 text-white/70">기존 실측 데이터와 우리 집 조건을 연결해 다음 24시간 사용량과 에너지 비용을 확인할 수 있습니다.</p><div className="mt-9 flex flex-wrap gap-3"><Link href="/households" className="btn bg-white !rounded-full px-6 py-3 text-teal hover:bg-slate-50">스마트홈 진단 시작 →</Link><Link href="/solar" className="btn border border-white/30 !rounded-full px-6 py-3 text-white hover:bg-white/10">태양광 분석하기</Link></div></div></section>
+    <div className="pointer-events-none absolute inset-0" aria-hidden>
+      <div
+        className="absolute inset-0"
+        style={{ background: "linear-gradient(150deg, #FBF3DE 0%, #F7FAFB 45%, #E1F5F7 100%)" }}
+      />
+      <div className="absolute -left-10 -top-14 h-56 w-56 rounded-full bg-amber opacity-20 blur-3xl" />
+      <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-teal opacity-20 blur-3xl" />
     </div>
   );
 }
 
-function DarkStat({ label, value }: { label: string; value: string }) { return <div className="rounded-xl border border-white/10 bg-white/5 p-3"><div className="text-[10px] text-white/35">{label}</div><div className="mt-1 text-sm font-bold text-white">{value}</div></div>; }
-function Number({ value, label }: { value: string; label: string }) { return <div><div className="text-3xl font-black tracking-tight text-ink">{value}</div><div className="mt-1 text-xs text-slate-400">{label}</div></div>; }
-function Product({ href, index, title, ko, color, body, metric }: { href: string; index: string; title: string; ko: string; color: string; body: string; metric: string }) { return <Link href={href} className="group rounded-2xl border border-white/10 bg-white/[0.04] p-6 transition hover:-translate-y-1 hover:bg-white/[0.08]"><div className="flex justify-between"><span className="text-xs text-white/30">{index}</span><span className="text-white/30 transition group-hover:translate-x-1 group-hover:text-white">↗</span></div><div className={`mt-12 text-xs font-bold uppercase tracking-[0.18em] ${color}`}>{metric}</div><h3 className="mt-3 text-3xl font-black">{title}</h3><div className="mt-1 text-sm text-white/40">{ko}</div><p className="mt-6 text-sm leading-7 text-white/55">{body}</p></Link>; }
-function Check({ title, body }: { title: string; body: string }) { return <div className="flex gap-4"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal text-[10px] text-white">✓</span><div><div className="text-sm font-bold text-ink">{title}</div><div className="mt-1 text-xs text-slate-500">{body}</div></div></div>; }
-function FlowStep({ number, title, body, color }: { number: string; title: string; body: string; color: string }) { return <div className={`flex items-center justify-between rounded-2xl border border-white/10 p-4 ${color}`}><div className="flex items-center gap-4"><span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-xs font-black text-white/60">{number}</span><div><div className="font-bold text-white">{title}</div><div className="mt-0.5 text-xs text-white/40">{body}</div></div></div><span className="text-white/25">→</span></div>; }
+function HeroArt({ h = "h-72 md:h-80 lg:h-96" }: { h?: string }) {
+  return (
+    <div className={`relative ${h} w-full`}>
+      <svg viewBox="0 0 400 300" className="absolute inset-0 h-full w-full">
+      <g transform="translate(200,150) scale(1.35) translate(-200,-150)">
+        <path
+          d="M70 230 Q140 150 200 190 T330 130"
+          fill="none"
+          stroke="#0A9AA8"
+          strokeWidth="2"
+          strokeDasharray="2 8"
+          strokeLinecap="round"
+          opacity="0.6"
+        />
+        <circle cx="330" cy="130" r="4" fill="#0A9AA8" />
+        <circle cx="200" cy="190" r="3" fill="#0A9AA8" opacity="0.7" />
+        <g transform="translate(120,120)">
+          <rect x="-6" y="52" width="92" height="6" rx="2" fill="#1F2328" opacity="0.15" />
+          <path d="M0 60 V20 L40 -10 L80 20 V60 Z" fill="#ffffff" stroke="#1F2328" strokeWidth="2.5" strokeLinejoin="round" />
+          <g transform="translate(10,-2) rotate(-18)">
+            <rect x="0" y="0" width="46" height="26" rx="2" fill="#0A9AA8" opacity="0.85" />
+            <line x1="0" y1="8.6" x2="46" y2="8.6" stroke="#E1F5F7" strokeWidth="1" />
+            <line x1="0" y1="17.2" x2="46" y2="17.2" stroke="#E1F5F7" strokeWidth="1" />
+            <line x1="15.3" y1="0" x2="15.3" y2="26" stroke="#E1F5F7" strokeWidth="1" />
+            <line x1="30.6" y1="0" x2="30.6" y2="26" stroke="#E1F5F7" strokeWidth="1" />
+          </g>
+          <path d="M44 26 L28 46 H40 L26 68 L54 42 H42 Z" fill="#E39A00" />
+        </g>
+        <g transform="translate(300,60)" opacity="0.9">
+          <circle cx="0" cy="0" r="16" fill="#FBF3DE" stroke="#E39A00" strokeWidth="2" />
+          {Array.from({ length: 8 }).map((_, i) => {
+            const a = (i * Math.PI) / 4;
+            const x1 = Math.cos(a) * 22, y1 = Math.sin(a) * 22;
+            const x2 = Math.cos(a) * 28, y2 = Math.sin(a) * 28;
+            return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#E39A00" strokeWidth="2" strokeLinecap="round" />;
+          })}
+        </g>
+      </g>
+      </svg>
+    </div>
+  );
+}
+
+function CardWatermark({ variant }: { variant: "clock" | "sun" | "data" }) {
+  const cls = "pointer-events-none absolute -right-5 -bottom-5 h-32 w-32 opacity-[0.07]";
+  if (variant === "clock") {
+    return (
+      <svg viewBox="0 0 100 100" className={cls} aria-hidden>
+        <circle cx="50" cy="50" r="42" fill="none" stroke="#0A9AA8" strokeWidth="6" />
+        <line x1="50" y1="50" x2="50" y2="24" stroke="#0A9AA8" strokeWidth="6" strokeLinecap="round" />
+        <line x1="50" y1="50" x2="70" y2="60" stroke="#0A9AA8" strokeWidth="6" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (variant === "sun") {
+    return (
+      <svg viewBox="0 0 100 100" className={cls} aria-hidden>
+        <circle cx="50" cy="50" r="22" fill="none" stroke="#E39A00" strokeWidth="6" />
+        {Array.from({ length: 8 }).map((_, i) => {
+          const a = (i * Math.PI) / 4;
+          const x1 = 50 + Math.cos(a) * 32, y1 = 50 + Math.sin(a) * 32;
+          const x2 = 50 + Math.cos(a) * 44, y2 = 50 + Math.sin(a) * 44;
+          return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#E39A00" strokeWidth="6" strokeLinecap="round" />;
+        })}
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 100 100" className={cls} aria-hidden>
+      <circle cx="30" cy="70" r="6" fill="#0A9AA8" />
+      <circle cx="55" cy="45" r="6" fill="#0A9AA8" />
+      <circle cx="80" cy="60" r="6" fill="#0A9AA8" />
+      <circle cx="70" cy="25" r="6" fill="#0A9AA8" />
+      <path d="M30 70 L55 45 L80 60 L70 25" fill="none" stroke="#0A9AA8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const CASES = [
+  {
+    title: "전기는 이제 ‘언제 쓰느냐’가 중요",
+    body: ["유럽에서는 시간에 따라 전기요금이 달라지고,", "남는 태양광 전력을 판매하는 가정도 늘고 있음"],
+    watermark: "clock" as const,
+  },
+  {
+    title: "태양광으로 수익 창출",
+    body: ["생산한 전력을 언제 사용하고, 얼마나 남기고,", "어떻게 활용하느냐에 따라 경제성이 달라짐"],
+    watermark: "sun" as const,
+  },
+  {
+    title: "한국도 전력 데이터를 활용 가능",
+    body: ["AMI 구축으로 가정의 전력 데이터를 활용할 기반은 충분 이제 이 데이터를 실제 절감과 의사결정으로 연결해야 함"],
+    watermark: "data" as const,
+  },
+];
+
+const ROLES = [
+  {
+    eng: "Trade",
+    color: "text-amber",
+    border: "border-amber/50",
+    bg: "bg-amber-soft",
+    sub: "전력 거래",
+    title: "더 유리한 시간에 전력을 활용하세요",
+    body: ["전력 가격과 태양광 발전량을 확인하고", "구매·판매 시점을 판단할 수 있습니다."],
+  },
+  {
+    eng: "Save",
+    color: "text-teal",
+    border: "border-teal/50",
+    bg: "bg-teal-soft",
+    sub: "전기요금 절감",
+    title: "이번 달 전기요금을 미리 확인하세요",
+    body: ["예상 사용량과 누진 구간을 분석해", "요금이 크게 늘기 전에 알려드립니다."],
+  },
+  {
+    eng: "Protect",
+    color: "text-danger",
+    border: "border-danger/50",
+    bg: "bg-danger-soft",
+    sub: "이상 사용 감지",
+    title: "평소와 다른 전력 사용을 찾아냅니다",
+    body: ["가전별 전력 패턴을 분석해", "평소와 다른 사용이 발생하면 알려드립니다."],
+  },
+];
+
+export default function WhyPage() {
+  return (
+    <div className="space-y-12">
+      {/* 히어로 */}
+      <section className="card relative overflow-hidden">
+        <HeroBg />
+        <div className="relative grid gap-6 px-8 py-6 md:grid-cols-[1.45fr_1fr] md:px-10 md:py-7">
+          <div className="self-center">
+            <div className="badge bg-amber-soft text-amber">
+              ① 사회문제 해결을 위한 AI · 융합·응용기술 아이디어
+            </div>
+            <p className="mt-1.5 text-base font-semibold text-slate-500">
+              WattWise Pi — 엣지 AI 기반 가정용 전력 예측·맞춤형 절전 비서
+            </p>
+            <h1 className="mt-3 whitespace-nowrap text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-[2.1rem] lg:text-[2.6rem] xl:text-[2.9rem]">
+              우리 집 전력, <span className="text-amber">한눈에</span> 보고 <span className="text-teal">똑똑하게</span> 관리하세요
+            </h1>
+            <div className="mt-3 max-w-xl text-base leading-relaxed text-slate-600">
+              <p className="text-xl font-bold text-ink">사용량 확인부터 태양광 수익 계산까지</p>
+              <ul className="mt-1.5 space-y-1">
+                <li>· 지금 우리 집은 전기를 얼마나 쓰고 있을까요?</li>
+                <li>· 태양광을 설치하면 전기요금은 얼마나 줄어들까요?</li>
+                <li>· 남는 전력은 판매하면 얼마를 받을 수 있을까요?</li>
+              </ul>
+              <p className="mt-2 font-bold">전력 데이터를 바탕으로 절감액과 예상 수익을 직접 확인해보세요.</p>
+            </div>
+          </div>
+          <div className="self-center">
+            <HeroArt h="h-64 md:h-72 lg:h-80" />
+          </div>
+        </div>
+      </section>
+
+      {/* What We Do */}
+      <section>
+        <div className="eyebrow !text-ink text-center text-2xl normal-case tracking-normal md:text-3xl">전력 관리, 한곳에서</div>
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          {ROLES.map((r) => (
+            <div key={r.eng} className={`card border-t-4 p-6 ${r.border}`}>
+              <div className={`text-base font-bold ${r.color}`}>{r.sub}</div>
+              <div className="mt-2 text-[1.05rem] font-bold text-ink">{r.title}</div>
+              <p className="mt-1.5 text-sm leading-relaxed text-slate-500">
+                {r.body.map((line, i) => (
+                  <span key={i}>
+                    {line}
+                    {i < r.body.length - 1 && <br />}
+                  </span>
+                ))}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 전력은 이제 사고파는 것 */}
+      <section>
+        <h2 className="section-title text-center text-2xl md:text-3xl">전력을 사고파는 시대가 시작됐습니다</h2>
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          {CASES.map((c) => (
+            <div key={c.title} className="card relative overflow-hidden p-6 text-center">
+              <CardWatermark variant={c.watermark} />
+              <div className="relative text-lg font-bold text-ink">{c.title}</div>
+              <p className="relative mt-1.5 text-sm leading-relaxed text-slate-500">
+                {c.body.map((line, i) => (
+                  <span key={i}>
+                    {line}
+                    {i < c.body.length - 1 && <br />}
+                  </span>
+                ))}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
