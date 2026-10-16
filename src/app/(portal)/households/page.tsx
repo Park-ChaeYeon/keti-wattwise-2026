@@ -37,9 +37,9 @@ export default function HouseholdsPage() {
     [occupancy, residents, sensitivity, settings],
   );
 
-  const monthlyBill = bill(result.monthly);
   const riskTone = result.score >= 70 ? "text-danger" : result.score >= 35 ? "text-amber" : "text-teal";
   const status = result.score >= 70 ? "확인 필요" : result.score >= 35 ? "주의 관찰" : "정상 범위";
+  const sensitivityLabel = sensitivity === "sensitive" ? "민감하게" : sensitivity === "relaxed" ? "낮게" : "보통";
 
   function update(id: string, patch: Partial<ApplianceSetting>) {
     setSettings((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
@@ -86,32 +86,60 @@ export default function HouseholdsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><div className="eyebrow">Smart home intelligence</div><h1 className="section-title mt-1">스마트홈 사용량 예측·이상 진단</h1><p className="mt-1 text-sm text-slate-500">다음 전력 사용량을 예측하고 평소 기준선과 다른 소비 패턴을 함께 확인합니다.</p></div>
-        <Link href="/analytics" className="btn-ghost">전력 대시보드 보기 ↗</Link>
-      </div>
+      <section className="relative overflow-hidden rounded-[2rem] bg-[#11181c] px-7 py-9 text-white shadow-pop md:px-10 md:py-11">
+        <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-danger/15 blur-3xl" />
+        <div className="absolute -bottom-28 left-1/3 h-64 w-64 rounded-full bg-teal/15 blur-3xl" />
+        <div className="relative grid items-center gap-8 lg:grid-cols-[1fr_0.42fr]">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[#ff9d8e]"><span className="h-2 w-2 rounded-full bg-danger" />Smart home safety</div>
+            <h1 className="mt-5 break-keep text-3xl font-black leading-tight tracking-[-0.035em] md:text-5xl">평소와 다른 전력 사용을<br /><span className="text-[#ff9d8e]">먼저 발견합니다.</span></h1>
+            <p className="mt-5 max-w-2xl break-keep text-sm leading-7 text-white/60">오늘의 전력 흐름을 평소 생활 패턴과 비교해 장시간 활동이 없거나 갑자기 사용량이 달라진 순간을 찾고, 확인이 필요한 신호를 알려드립니다.</p>
+            <Link href="/analytics" className="mt-7 inline-flex rounded-full border border-white/20 px-4 py-2 text-xs font-bold text-white/75 transition hover:bg-white/10 hover:text-white">전력 사용량 예측 보기 ↗</Link>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-5 backdrop-blur">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-danger/20 text-xl text-[#ff9d8e]">⌁</div>
+            <div className="mt-5 text-sm font-black">생활 신호를 놓치지 않도록</div>
+            <p className="mt-2 break-keep text-xs leading-6 text-white/45">변화가 감지되면 상태와 원인, 확인할 행동을 한눈에 안내합니다.</p>
+          </div>
+        </div>
+      </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 p-1.5">
         <div className="grid gap-2 sm:grid-cols-2">
           <button type="button" onClick={() => setMode("demo")} className={`rounded-xl p-4 text-left transition ${mode === "demo" ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:bg-white/60"}`}>
-            <div className={`text-[10px] font-black tracking-[0.12em] ${mode === "demo" ? "text-teal" : "text-slate-400"}`}>RECOMMENDED</div><div className="mt-1 font-extrabold">AI 자동 진단</div><div className="mt-1 text-xs text-slate-500">가구 전력 데이터로 예측과 이상탐지를 즉시 실행</div>
+            <div className={`text-[10px] font-black tracking-[0.12em] ${mode === "demo" ? "text-danger" : "text-slate-400"}`}>RECOMMENDED</div><div className="mt-1 font-extrabold">이상 신호 자동 점검</div><div className="mt-1 text-xs text-slate-500">최근 전력 패턴에서 평소와 다른 신호를 즉시 확인</div>
           </button>
           <button type="button" onClick={() => setMode("direct")} className={`rounded-xl p-4 text-left transition ${mode === "direct" ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:bg-white/60"}`}>
-            <div className={`text-[10px] font-black tracking-[0.12em] ${mode === "direct" ? "text-amber" : "text-slate-400"}`}>CUSTOM</div><div className="mt-1 font-extrabold">내 정보로 상세 진단</div><div className="mt-1 text-xs text-slate-500">보유 가전과 사용시간을 입력해 맞춤 분석</div>
+            <div className={`text-[10px] font-black tracking-[0.12em] ${mode === "direct" ? "text-amber" : "text-slate-400"}`}>CUSTOM</div><div className="mt-1 font-extrabold">내 가전 직접 점검</div><div className="mt-1 text-xs text-slate-500">평소와 오늘의 사용시간을 비교해 이상 여부 확인</div>
           </button>
         </div>
       </section>
 
       {mode === "demo" ? (
         <>
-          <section className="card border-l-4 border-l-teal p-6 md:p-7">
-            <div className="flex items-start gap-4"><div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-soft text-lg text-teal">⌁</div><div><div className="flex items-center gap-2 text-xs font-bold text-teal"><span className="h-1.5 w-1.5 rounded-full bg-teal" />AI 분석 완료</div><h2 className="mt-1.5 text-xl font-black">전력 데이터를 자동으로 진단했습니다</h2><p className="mt-2 max-w-2xl break-keep text-sm leading-6 text-slate-500">최근 사용 패턴으로 다음 24시간 소비량을 예측하고, 가구별 기준선에서 벗어난 신호를 함께 분석했습니다.</p></div></div>
-            <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4"><span className="badge bg-slate-100 text-slate-500">실제 시계열</span><span className="badge bg-slate-100 text-slate-500">Chronos-2 예측</span><span className="badge bg-slate-100 text-slate-500">이상탐지 모델</span><span className="badge bg-slate-100 text-slate-500">익명 처리</span></div>
+          <section className="card border-l-4 border-l-danger p-6 md:p-7">
+            <div className="flex items-start gap-4"><div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-danger-soft text-lg text-danger">!</div><div><div className="flex items-center gap-2 text-xs font-bold text-danger"><span className="h-1.5 w-1.5 rounded-full bg-danger" />전력 이상 점검</div><h2 className="mt-1.5 text-xl font-black">확인이 필요한 이상 신호를 점검합니다</h2><p className="mt-2 max-w-2xl break-keep text-sm leading-6 text-slate-500">최근 전력 신호를 우리 집의 평소 기준선과 비교해 이상 징후를 찾고, 발견된 신호에 맞는 확인 방법을 안내합니다.</p></div></div>
           </section>
 
           {demoState === "error" && <div className="rounded-xl bg-danger-soft p-5 text-sm text-danger">{demoError}<button type="button" className="ml-3 underline" onClick={() => void loadDemo()}>다시 시도</button></div>}
-          {demoState === "loading" && !demo && <div className="card flex min-h-[360px] flex-col items-center justify-center"><span className="h-8 w-8 animate-spin rounded-full border-4 border-teal/20 border-t-teal" /><div className="mt-4 font-bold">실제 모델을 실행하고 있습니다</div><p className="mt-1 text-xs text-slate-400">가구 시계열 예측과 이상탐지를 동시에 처리합니다.</p></div>}
-          {demo && <><div className="grid gap-4 md:grid-cols-4"><Kpi label="내일 예상 사용량" value={`${(demo.monthly / 30).toFixed(1)}kWh`} sub="향후 24시간 중앙 예측" /><Kpi label="월 예상 사용량" value={`${Math.round(demo.monthly)}kWh`} sub="24시간 예측 × 30일" /><Kpi label="예상 전기요금" value={won(bill(demo.monthly).total)} tone="text-amber" sub={`${tierOf(demo.monthly)}구간 요금`} /><Kpi label="AI 진단 상태" value={demo.anomaly.isAnomaly ? "이상 신호 감지" : "정상 범위"} tone={demo.anomaly.isAnomaly ? "text-danger" : "text-teal"} sub={`기준선 대비 ${Math.min(999, Math.round(demo.anomaly.score / Math.max(0.001, demo.anomaly.threshold) * 100))}%`} /></div><div className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]"><section className="card p-5"><div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-sm font-bold">다음 24시간 사용량 예측</div><div className="mt-1 text-xs text-slate-400">{demo.house.id}의 최근 실측을 Chronos-2 체크포인트에 입력한 결과</div></div><div className="flex items-center gap-3 text-[10px] text-slate-400"><span><i className="mr-1 inline-block h-0.5 w-4 bg-teal align-middle" />중앙 예측</span><span><i className="mr-1 inline-block h-2 w-4 bg-teal/15 align-middle" />10–90% 범위</span></div></div><div className="mt-4 h-72"><ResponsiveContainer><ComposedChart data={demo.forecast} margin={{ left: -8, right: 8 }}><CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" vertical={false} /><XAxis dataKey="hour" interval={2} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} /><YAxis width={42} tick={{ fontSize: 10, fill: "#94a3b8" }} unit="k" axisLine={false} tickLine={false} /><Tooltip formatter={(v: number, name: string) => [name === "range" ? `${v.toFixed(2)}kWh` : `${v.toFixed(2)}kWh`, name === "expected" ? "중앙 예측" : name === "range" ? "예측 구간 폭" : "하한"]} /><Area dataKey="low" stackId="interval" stroke="none" fill="transparent" isAnimationActive={false} /><Area dataKey="range" stackId="interval" stroke="none" fill={TEAL} fillOpacity={0.13} isAnimationActive={false} /><Line dataKey="expected" stroke={TEAL} strokeWidth={2.5} dot={false} isAnimationActive={false} /></ComposedChart></ResponsiveContainer></div><div className="mt-2 flex justify-between border-t border-slate-100 pt-3 text-xs text-slate-400"><span>{demo.house.type} · {demo.house.area}</span><span>{demo.house.rows.toLocaleString()}시간 데이터</span></div></section><AnomalyCard anomaly={demo.anomaly} /></div></>}
+          {demoState === "loading" && !demo && <div className="card flex min-h-[360px] flex-col items-center justify-center"><span className="h-8 w-8 animate-spin rounded-full border-4 border-danger/20 border-t-danger" /><div className="mt-4 font-bold">이상 신호를 점검하고 있습니다</div><p className="mt-1 text-xs text-slate-400">최근 전력 패턴을 평소 기준선과 비교합니다.</p></div>}
+          {demo && <>
+            <div className="grid gap-4 md:grid-cols-4">
+              <Kpi label="현재 진단 상태" value={demo.anomaly.isAnomaly ? "확인 필요" : "정상 범위"} tone={demo.anomaly.isAnomaly ? "text-danger" : "text-teal"} sub={demo.anomaly.isAnomaly ? "평소와 다른 신호 감지" : "평소 사용 범위 유지"} />
+              <Kpi label="기준선 편차" value={`${Math.min(999, Math.round(demo.anomaly.score / Math.max(0.001, demo.anomaly.threshold) * 100))}%`} tone={demo.anomaly.isAnomaly ? "text-danger" : "text-teal"} sub="100% 이상이면 확인 필요" />
+              <Kpi label="탐지 결과" value={SCENARIO_COPY[demo.anomaly.scenario]?.title ?? "전력 패턴 점검"} sub="AI가 감지한 주요 신호" />
+              <Kpi label="판단 기준" value={demo.anomaly.threshold.toFixed(2)} sub={`현재 모델 점수 ${demo.anomaly.score.toFixed(2)}`} />
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+              <AnomalyCard anomaly={demo.anomaly} />
+              <section className="card p-5"><div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-sm font-bold">참고 · 다음 24시간 사용량</div><div className="mt-1 text-xs text-slate-400">이상 신호 판단을 돕는 보조 예측 정보입니다</div></div><div className="flex items-center gap-3 text-[10px] text-slate-400"><span><i className="mr-1 inline-block h-0.5 w-4 bg-teal align-middle" />중앙 예측</span><span><i className="mr-1 inline-block h-2 w-4 bg-teal/15 align-middle" />10–90% 범위</span></div></div><div className="mt-4 h-72"><ResponsiveContainer><ComposedChart data={demo.forecast} margin={{ left: -8, right: 8 }}><CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" vertical={false} /><XAxis dataKey="hour" interval={2} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} /><YAxis width={42} tick={{ fontSize: 10, fill: "#94a3b8" }} unit="k" axisLine={false} tickLine={false} /><Tooltip formatter={(v: number, name: string) => [`${v.toFixed(2)}kWh`, name === "expected" ? "중앙 예측" : name === "range" ? "예측 구간 폭" : "하한"]} /><Area dataKey="low" stackId="interval" stroke="none" fill="transparent" isAnimationActive={false} /><Area dataKey="range" stackId="interval" stroke="none" fill={TEAL} fillOpacity={0.13} isAnimationActive={false} /><Line dataKey="expected" stroke={TEAL} strokeWidth={2.5} dot={false} isAnimationActive={false} /></ComposedChart></ResponsiveContainer></div><div className="mt-2 flex justify-between border-t border-slate-100 pt-3 text-xs text-slate-400"><span>{demo.house.type} · {demo.house.area}</span><span>{demo.house.rows.toLocaleString()}시간 데이터</span></div></section>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Kpi label="참고 · 내일 예상 사용량" value={`${(demo.monthly / 30).toFixed(1)}kWh`} sub="향후 24시간 중앙 예측" />
+              <Kpi label="참고 · 월 예상 사용량" value={`${Math.round(demo.monthly)}kWh`} sub="24시간 예측 × 30일" />
+              <Kpi label="참고 · 예상 전기요금" value={won(bill(demo.monthly).total)} tone="text-amber" sub={`${tierOf(demo.monthly)}구간 요금`} />
+            </div>
+          </>}
         </>
       ) : (
         <>
@@ -143,19 +171,19 @@ export default function HouseholdsPage() {
       </section>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <Kpi label="월 예상 사용량" value={`${Math.round(result.monthly)}kWh`} sub={`${homeType} · ${residents}인 기준`} />
-        <Kpi label="예상 전기요금" value={won(monthlyBill.total)} tone="text-amber" sub={`${tierOf(result.monthly)}구간 요금`} />
-        <Kpi label="선택 가전" value={`${result.selected.length}개`} sub={`하루 평균 ${result.daily.toFixed(1)}kWh`} />
-        <Kpi label="이상탐지 상태" value={status} tone={riskTone} sub={`편차 점수 ${result.score}/100`} />
+        <Kpi label="현재 진단 상태" value={status} tone={riskTone} sub={result.unusual.length ? "확인이 필요한 가전이 있습니다" : "평소 사용 범위입니다"} />
+        <Kpi label="편차 점수" value={`${result.score}/100`} tone={riskTone} sub={`판단 기준 ${(result.threshold * 100).toFixed(0)}%`} />
+        <Kpi label="확인 필요 가전" value={`${result.unusual.length}개`} tone={result.unusual.length ? "text-danger" : "text-teal"} sub={`전체 선택 가전 ${result.selected.length}개`} />
+        <Kpi label="감지 민감도" value={sensitivityLabel} sub="설정한 이상 판단 수준" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
         <section className="card p-5">
-          <div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-sm font-bold">다음 24시간 사용량 예측</div><div className="mt-1 text-xs text-slate-400">선택한 가전과 재실 패턴 기반 · 음영은 예상 범위</div></div><div className="flex gap-3 text-[11px]"><span className="text-teal">━ 오늘 관측</span><span className="text-amber">━ 예측</span></div></div>
-          <div className="mt-4 h-72"><ResponsiveContainer><ComposedChart data={result.hourly} margin={{ left: -8, right: 8 }}><CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" /><XAxis dataKey="hour" interval={2} tick={{ fontSize: 10, fill: "#94a3b8" }} /><YAxis width={42} tick={{ fontSize: 10, fill: "#94a3b8" }} unit="k" /><Tooltip formatter={(v: number, name) => [`${v.toFixed(2)}kWh`, name]} /><Area dataKey="high" stroke="none" fill={AMBER} fillOpacity={0.1} /><Area dataKey="low" stroke="none" fill="white" /><Line dataKey="expected" name="예측" stroke={AMBER} strokeWidth={2.5} dot={false} /><Line dataKey="observed" name="오늘 관측" stroke={TEAL} strokeWidth={2} dot={false} /></ComposedChart></ResponsiveContainer></div>
+          <div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-sm font-bold">평소 패턴과 오늘 사용 비교</div><div className="mt-1 text-xs text-slate-400">예상 범위를 벗어난 시간대와 사용 변화를 확인합니다</div></div><div className="flex gap-3 text-[11px]"><span className="text-teal">━ 오늘 관측</span><span className="text-amber">━ 평소 예상</span></div></div>
+          <div className="mt-4 h-72"><ResponsiveContainer><ComposedChart data={result.hourly} margin={{ left: -8, right: 8 }}><CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" /><XAxis dataKey="hour" interval={2} tick={{ fontSize: 10, fill: "#94a3b8" }} /><YAxis width={42} tick={{ fontSize: 10, fill: "#94a3b8" }} unit="k" /><Tooltip formatter={(v: number, name) => [`${v.toFixed(2)}kWh`, name]} /><Area dataKey="high" stroke="none" fill={AMBER} fillOpacity={0.1} /><Area dataKey="low" stroke="none" fill="white" /><Line dataKey="expected" name="평소 예상" stroke={AMBER} strokeWidth={2.5} dot={false} /><Line dataKey="observed" name="오늘 관측" stroke={TEAL} strokeWidth={2} dot={false} /></ComposedChart></ResponsiveContainer></div>
         </section>
         <section className="card p-5">
-          <div className="text-sm font-bold">자동 이상탐지</div>
+          <div className="text-sm font-bold">이상 신호 및 권장 조치</div>
           <div className={`mt-4 text-3xl font-black ${riskTone}`}>{status}</div>
           <div className="mt-1 text-xs text-slate-400">민감도 기준 편차 {(result.threshold * 100).toFixed(0)}% 초과 감지</div>
           <div className="mt-5 space-y-2">
@@ -166,7 +194,7 @@ export default function HouseholdsPage() {
       </div>
 
       <section className="card overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-4"><div className="text-sm font-bold">가전별 예측 상세</div><div className="mt-1 text-xs text-slate-400">예상 사용량이 큰 순서입니다.</div></div>
+        <div className="border-b border-slate-100 px-5 py-4"><div className="text-sm font-bold">가전별 이상 신호 상세</div><div className="mt-1 text-xs text-slate-400">평소 사용량과 오늘 관측값의 차이를 가전별로 확인합니다.</div></div>
         <div className="divide-y divide-slate-100 px-5">
           {result.applianceRows.map((item) => <div key={item.id} className="grid items-center gap-2 py-3 text-sm sm:grid-cols-[1fr_120px_120px]"><div className="font-medium">{item.icon} {item.name} <span className="ml-2 text-xs font-normal text-slate-400">{item.watt.toLocaleString()}W</span></div><div><span className="text-xs text-slate-400">월 예상 </span><b>{item.normal.toFixed(1)}kWh</b></div><div className={item.deviation > result.threshold ? "font-bold text-danger" : "text-slate-500"}>오늘 {item.today.toFixed(1)}kWh</div></div>)}
         </div>

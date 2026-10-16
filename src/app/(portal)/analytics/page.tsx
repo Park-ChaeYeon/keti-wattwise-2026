@@ -93,6 +93,7 @@ export default function AnalyticsPage() {
   const dailyAvg = monthKwh / 30;
   const nxt = daysToNextTier(monthKwh, dailyAvg);
   const appl = useMemo(() => applianceBreakdown(monthKwh), [monthKwh]);
+  const selectedHouseholdMeta = households.find((house) => house.id === selectedHousehold);
   const selectedBenchmark = benchmark.find((house) => house.id === benchmarkId);
   const eda = useMemo(
     () => buildBenchmarkAnalysis(selectedBenchmark, fromDay, toDay),
@@ -101,14 +102,27 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="section-title">🔋 전력 분석 대시보드</h1>
-      </div>
+      <section className="relative overflow-hidden rounded-[2rem] bg-[#11181c] px-7 py-9 text-white shadow-pop md:px-10 md:py-11">
+        <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-teal/20 blur-3xl" />
+        <div className="absolute -bottom-28 left-1/3 h-64 w-64 rounded-full bg-amber/15 blur-3xl" />
+        <div className="relative grid items-center gap-8 lg:grid-cols-[1fr_0.42fr]">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[#54dbe6]"><span className="h-2 w-2 rounded-full bg-teal" />24-hour energy forecast</div>
+            <h1 className="mt-5 break-keep text-3xl font-black leading-tight tracking-[-0.035em] md:text-5xl">내일의 전력 사용량을<br /><span className="text-[#54dbe6]">오늘 미리 확인합니다.</span></h1>
+            <p className="mt-5 max-w-2xl break-keep text-sm leading-7 text-white/60">최근 전력 사용 흐름으로 다음 24시간을 예측하고, 예상 요금과 누진 구간 변화를 한눈에 보여드립니다.</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-5 backdrop-blur">
+            <div className="text-xs font-bold text-white/40">분석 기준</div>
+            <div className="mt-2 text-3xl font-black text-[#54dbe6]">NEXT 24H</div>
+            <p className="mt-3 break-keep text-xs leading-6 text-white/45">사용량 예측에서 월 예상 요금과 누진 구간까지 이어서 계산합니다.</p>
+          </div>
+        </div>
+      </section>
 
-      {/* 자동 선택된 분석 대상 */}
+      {/* 분석 대상 정보 */}
       <section className="card flex flex-wrap items-center justify-between gap-4 p-5">
-        <div><div className="text-xs font-bold uppercase tracking-[0.14em] text-teal">Selected household</div><div className="mt-1 text-lg font-black">{selectedHousehold ? selectedHousehold.replace(/^house_/, "가구 ").replace(/^H0*/, "가구 ") : "가구 데이터를 불러오는 중"}</div><div className="mt-1 text-xs text-slate-500">{households.find((house) => house.id === selectedHousehold)?.type} · {households.find((house) => house.id === selectedHousehold)?.area}</div></div>
-        <div className={`badge ${householdForecast.error ? "bg-danger-soft text-danger" : "bg-teal-soft text-teal"}`}>{householdForecast.loading ? "Chronos-2 분석 중…" : householdForecast.error ?? "최근 실측 기반 분석 완료"}</div>
+        <div><div className="text-xs font-bold uppercase tracking-[0.14em] text-teal">Analysis data</div><div className="mt-1 text-lg font-black">최진규님</div><div className="mt-1 text-xs text-slate-500">{selectedHouseholdMeta ? `${selectedHouseholdMeta.type} · ${selectedHouseholdMeta.area}` : "분석 데이터를 불러오는 중"}</div></div>
+        <div className={`badge ${householdForecast.error ? "bg-danger-soft text-danger" : "bg-teal-soft text-teal"}`}>{householdForecast.loading ? "사용량 분석 중…" : householdForecast.error ?? "최근 실측 기반 분석 완료"}</div>
       </section>
 
       {/* KPI */}
@@ -181,12 +195,12 @@ export default function AnalyticsPage() {
       <section className="space-y-4">
         <div>
           <h2 className="section-title">📊 탐색적 데이터 분석 (EDA)</h2>
-          <p className="mt-1 text-sm text-slate-500">자동 선택된 가구의 실측 데이터를 기간별·시간대별로 분석합니다.</p>
+          <p className="mt-1 text-sm text-slate-500">연결된 실측 데이터를 기간별·시간대별로 분석합니다.</p>
         </div>
         <div className="card grid gap-4 p-5 md:grid-cols-2">
           <label><span className="label">시작일 · {fromDay}일차</span><input className="w-full accent-ink" type="range" min={1} max={31} value={fromDay} onChange={(e) => setFromDay(+e.target.value)} /></label>
           <label><span className="label">종료일 · {toDay}일차</span><input className="w-full accent-ink" type="range" min={1} max={31} value={toDay} onChange={(e) => setToDay(+e.target.value)} /></label>
-          {selectedBenchmark && <div className="text-xs text-slate-400 md:col-span-2">{selectedBenchmark.label} · {selectedBenchmark.area} · 채널 {selectedBenchmark.channels}개 · 측정 시작 {selectedBenchmark.start} · 현재 {Math.min(fromDay, toDay)}~{Math.max(fromDay, toDay)}일차 선택</div>}
+          {selectedBenchmark && <div className="text-xs text-slate-400 md:col-span-2">실측 데이터 · {selectedBenchmark.area} · 측정 채널 {selectedBenchmark.channels}개 · 측정 시작 {selectedBenchmark.start} · 현재 {Math.min(fromDay, toDay)}~{Math.max(fromDay, toDay)}일차 선택</div>}
         </div>
         {!eda ? <div className="card p-8 text-center text-sm text-slate-400">실측 벤치마크 데이터를 불러오는 중입니다…</div> : <>
         <div className="grid gap-4 lg:grid-cols-2">
