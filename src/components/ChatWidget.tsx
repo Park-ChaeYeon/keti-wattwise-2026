@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { answer, SUGGESTIONS, type Msg } from "@/lib/chatbot";
 
 export default function ChatWidget() {
   const [dismissed, setDismissed] = useState(false);
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([
-    { role: "bot", text: "안녕하세요! WattWise 도우미예요 ⚡ 무엇이든 물어보세요." },
+    { role: "bot", text: "안녕하세요! 전력 AI 상담사 와티예요. 전기요금과 사용량을 물어보세요." },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -50,9 +51,9 @@ export default function ChatWidget() {
           <button
             onClick={() => setOpen(true)}
             aria-label="챗봇 열기"
-            className="flex h-[60px] w-[60px] items-center justify-center rounded-full bg-ink text-2xl text-white shadow-lg transition hover:scale-105"
+            className="relative flex h-[64px] w-[64px] items-center justify-center overflow-hidden rounded-2xl border-2 border-white bg-amber-soft shadow-lg transition hover:-translate-y-1 hover:shadow-pop"
           >
-            💬
+            <Image src="/img/wattwise-ai-consultant.png" alt="전력 AI 상담사 와티" fill unoptimized className="object-contain p-1" />
           </button>
           <button
             onClick={dismiss}
@@ -69,10 +70,10 @@ export default function ChatWidget() {
         <div className="fixed bottom-5 right-5 z-50 flex h-[520px] w-[92vw] max-w-[380px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
           <div className="flex items-center justify-between bg-ink px-4 py-3 text-white">
             <div className="flex items-center gap-2">
-              <span className="text-lg">⚡</span>
+              <span className="relative h-9 w-9 overflow-hidden rounded-lg bg-amber-soft"><Image src="/img/wattwise-ai-consultant.png" alt="" fill unoptimized className="object-contain" /></span>
               <div>
-                <div className="text-sm font-bold">WattWise 도우미</div>
-                <div className="text-[11px] text-white/60">로컬 sLLM · Qwen2.5-1.5B</div>
+                <div className="text-sm font-bold">와티 · 전력 AI 상담사</div>
+                <div className="text-[11px] text-white/60">상담 가능 · 로컬 AI</div>
               </div>
             </div>
             <button onClick={() => setOpen(false)} aria-label="닫기" className="text-white/70 hover:text-white">▾</button>

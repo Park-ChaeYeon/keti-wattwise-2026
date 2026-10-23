@@ -1,82 +1,131 @@
-# WattWise · 온디바이스 전력 예측·이상감지 비서
+# WattWise
 
-> **2026 KETI AI 융합 응용기술 아이디어 경진대회** · 고려대 팀 · 멘토 조인표 연구원
-> 확률 예측 기반 온디바이스 전력 비서 (Raspberry Pi 5)
+가정에서 수집한 전력 데이터를 로컬에서 분석하고, 다음 24시간의 사용량 예측과
+이상 징후 탐지, 전기요금·태양광 의사결정을 한 화면에 연결한 온디바이스 에너지
+관리 프로젝트입니다. 2026 KETI AI 융합 응용기술 아이디어 경진대회를 위해
+고려대학교 팀이 개발했습니다.
 
-### 🔗 라이브 데모
-**https://park-chaeyeon.github.io/keti-wattwise-2026/**
-(설치·로그인 없이 링크만 열면 됩니다)
+## 핵심 구현
 
----
+- 라즈베리파이·CT 센서로 수집한 분 단위 데이터를 검증하고 시간 단위 Parquet으로 변환
+- Chronos-2 체크포인트를 이용한 가전별·가구별 24시간 확률 예측
+- 오토인코더 기반 가구 이상 사용 시나리오 분석
+- 누진요금, 모의 전력 거래, 건물별 태양광 발전량·손익분기 계산
+- Ollama `qwen2.5:1.5b`와 실측 사용량을 결합한 로컬 전력 상담
 
-## 한 줄 소개
+이 저장소는 단순 화면 목업과 실제 실행 경로를 구분합니다. 실측·예측 기능은 로컬
+Python 프로세스와 모델 체크포인트가 필요하고, 정적 대시보드 자료는 `public/dash`에
+독립적으로 보관합니다.
 
-> **"남들은 kWh를 점으로 예측하지만, 우리는 확률분포로 예측한다."**
+## 아키텍처
 
-소형 SBC 한 대에서 시계열 예측 모델과 경량 LLM을 동시에 구동해, 외부 서버 없이 가정 내부에서
-**요금 예측 · 누진제 경고 · 절전 상담**과 **고령 1인가구 안부(이상감지)**까지 완결되는 온디바이스 AI 비서.
+```text
+브라우저
+  └─ Next.js App Router
+      ├─ src/features       도메인 설정과 API 계약
+      ├─ src/components     여러 화면에서 재사용하는 UI
+      ├─ src/lib            요금·태양광·거래 등 순수 도메인 로직
+      ├─ src/server         서버 전용 Python 실행 어댑터
+      └─ src/app/api        입력 검증과 HTTP 응답
+              │
+              ├─ dashboard              가전 실측 전처리·Chronos-2 추론
+              └─ household_chronos2     가구 전체 예측·이상탐지
+```
 
-가구별 확률 부하 모델 **하나**가 4개 기능을 묶습니다:
+서버 API는 모델 구현을 직접 알지 않고 `src/server/python.ts`를 통해 JSON 계약으로
+통신합니다. Python 쪽에서는 `dashboard/data_store.py`가 데이터 경로와 스키마를
+관리하고, `measurement_pipeline.py`가 원본 검증과 Parquet 생성을 담당합니다.
 
-| 기능 | 확률 레이어에서 나오는 방식 |
-| --- | --- |
-| 안부 이상 감지 | 관측이 예측 분포 하위 분위 밖 이탈 → 이상 확률 + 신뢰도 |
-| 누진 자동조종 | 월말 누적 분포 → 구간 초과 확률("3구간 진입 73%") |
-| 가전별 분해 | 총량을 가전 단위로 분해 + 확신도 |
-| 태양광 경제성 | 발전량 불확실성 전파 → 회수기간 구간 추정 |
+## 저장소 구조
 
----
+```text
+src/
+├── app/                    페이지와 API 라우트
+├── components/             공용 UI 컴포넌트
+├── features/               기능별 설정·공유 타입
+├── lib/                    프레임워크 비의존 도메인 로직
+└── server/                 서버 전용 인프라 어댑터
+dashboard/                  가전 실측 데이터와 예측 파이프라인
+household_chronos2/         가구 전체 모델 파이프라인
+tests/                      TypeScript 도메인 회귀 테스트
+public/dash/                정적 분석 결과물
+```
 
-## 페이지 구성 (10개 메뉴)
+## 로컬 실행
 
-| 메뉴 | 내용 |
-| --- | --- |
-| 소개 | 프로젝트 개요·아키텍처 |
-| 아이디어 / 이슈·할일 / 게시판 | 팀 협업 보드 |
-| 스마트홈 진단 | 가정별 전력·이상감지 데모 |
-| 전력 분석 | 사용량 분석 대시보드 |
-| RE100 태양광 | 건물별 일조·발전 잠재량 3D 지도, 설치 손익 계산 |
-| **데이터** | 89가구 실측 전력 벤치마크 |
-| **예측** | 모델 4종(WattCast·GBM·NGBoost 등) + 분위수 밴드 |
-| **실증** | Pi 5 + CT 센서 구성도 |
-
----
-
-## 로컬에서 실행하기
+### 1. 웹 애플리케이션
 
 ```bash
-git clone https://github.com/Park-ChaeYeon/keti-wattwise-2026
-cd keti-wattwise-2026
 npm install
 npm run dev
-# → http://localhost:3000  (로그인: korea_03 / korea)
 ```
 
-> 경로에 대괄호·공백이 있으면 Next.js가 깨질 수 있어요. `~/keti-wattwise` 같은 단순 경로에서 실행하세요.
+브라우저에서 `http://localhost:3000`을 열고 데모 계정
+`korea_03 / korea`로 로그인합니다.
 
----
+### 2. Python 예측 환경
 
-## 기술 스택
-
-- **Next.js 14** (App Router) · TypeScript · Tailwind CSS
-- 차트 **Recharts** · 3D 지도 **deck.gl + maplibre**
-- 태양 기하학(`src/lib/solarpv.ts`) 실제 구현 · 나머지 예측·챗봇은 데모(합성/규칙 기반)
-- 정적 배포: `output: export` → **GitHub Pages** (`gh-pages` 브랜치)
-
-## 폴더 구조
-
-```
-src/app/(portal)/…   각 메뉴 페이지
-src/components/       공용 컴포넌트(Nav 등)
-src/lib/             데이터·인증·태양광 등 로직
-public/dash/         자체완결 대시보드 HTML(더블클릭 가능)
+```bash
+python3 -m venv .venv-dashboard
+.venv-dashboard/bin/python -m pip install -r dashboard/requirements.txt
 ```
 
-## 브랜치
+웹 서버는 `.venv-dashboard/bin/python`을 자동으로 사용합니다. 다른 인터프리터는
+`WATTWISE_PYTHON` 환경 변수로 지정할 수 있습니다.
 
-- `master` — 소스(동적 앱, 로그인·글쓰기 포함)
-- `gh-pages` — 배포용 정적 사이트(로그인 없이 열람 전용)
+### 3. 로컬 상담 모델
 
----
+```bash
+brew install ollama
+brew services start ollama
+ollama pull qwen2.5:1.5b
+```
 
-*발표·시연용 데모입니다. 예측 모델·데이터는 개발 단계이며, 계정(korea_03)은 데모용입니다.*
+기본 연결 주소는 `http://localhost:11434`입니다. 필요하면 `OLLAMA_URL`과
+`WATTWISE_CHAT_MODEL`로 변경할 수 있습니다.
+
+## 실측 데이터 갱신
+
+원본 CSV는 개인정보와 용량 문제로 Git에 커밋하지 않습니다. 프로젝트 루트의
+`실측 2/<사용자>_<가전>/*.csv`에 둔 뒤 다음 명령을 실행합니다.
+
+```bash
+.venv-dashboard/bin/python dashboard/measurement_pipeline.py \
+  --source "실측 2"
+```
+
+파이프라인은 필수 열, 가구·채널 ID, 중복 시각, 시간별 수집률을 검사합니다. 모든
+입력을 먼저 검증하고 임시 파일을 거쳐 `dashboard/data`의 Parquet을 교체합니다.
+원본 폴더는 `.gitignore`에 포함되며 전처리 결과만 버전 관리합니다.
+
+## 품질 검증
+
+```bash
+npm run check
+.venv-dashboard/bin/python -m unittest dashboard.test_measurement_pipeline
+```
+
+`npm run check`는 도메인 테스트, ESLint, TypeScript 검사와 프로덕션 빌드를 순서대로
+실행합니다. Python 테스트는 CSV 검증, 집계 단위, 저장 후 재로딩 계약을 확인합니다.
+
+## 주요 기술 선택
+
+| 영역 | 기술 | 선택 이유 |
+|---|---|---|
+| Web | Next.js 14, TypeScript, Tailwind CSS | 서버 API와 시각화 UI를 하나의 프로젝트에서 관리 |
+| Visualization | Recharts, deck.gl, MapLibre | 시계열·지도 기반 에너지 결과 표현 |
+| Data | pandas, PyArrow, Parquet | 시간 단위 집계와 모델 입력의 재현성 확보 |
+| Forecast | Chronos-2, PyTorch | 분위수 기반 24시간 확률 예측 |
+| Local LLM | Ollama, Qwen 2.5 1.5B | 외부 전송 없는 로컬 상담 경로 |
+
+## 현재 범위와 한계
+
+- 모델 추론은 체크포인트와 Python 의존성이 준비된 로컬 환경에서 동작합니다.
+- GitHub Pages의 정적 데모에서는 서버 API·Ollama 기능을 실행할 수 없습니다.
+- 태양광 결과는 사전 타당성 검토용이며 구조·음영·시공 조건은 현장 실측이 필요합니다.
+- 인증과 로컬 JSON 저장소는 발표용 단일 사용자 구성으로, 운영 배포용 인증·DB는 아닙니다.
+
+세부 가전 파이프라인 사용법은 [`dashboard/README.md`](dashboard/README.md), 가구 모델
+실행법은 [`household_chronos2/README.md`](household_chronos2/README.md)를 참고하세요.
+모듈 경계와 데이터 흐름에 대한 자세한 설명은
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)에 정리되어 있습니다.

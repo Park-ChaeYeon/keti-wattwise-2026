@@ -1,227 +1,129 @@
-function HeroBg() {
-  return (
-    <div className="pointer-events-none absolute inset-0" aria-hidden>
-      <div
-        className="absolute inset-0"
-        style={{ background: "linear-gradient(150deg, #FBF3DE 0%, #F7FAFB 45%, #E1F5F7 100%)" }}
-      />
-      <div className="absolute -left-10 -top-14 h-56 w-56 rounded-full bg-amber opacity-20 blur-3xl" />
-      <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-teal opacity-20 blur-3xl" />
-    </div>
-  );
-}
+import Image from "next/image";
+import Link from "next/link";
 
-function HeroArt({ h = "h-72 md:h-80 lg:h-96" }: { h?: string }) {
-  return (
-    <div className={`relative ${h} w-full`}>
-      <svg viewBox="0 0 400 300" className="absolute inset-0 h-full w-full">
-      <g transform="translate(200,150) scale(1.35) translate(-200,-150)">
-        <path
-          d="M70 230 Q140 150 200 190 T330 130"
-          fill="none"
-          stroke="#0A9AA8"
-          strokeWidth="2"
-          strokeDasharray="2 8"
-          strokeLinecap="round"
-          opacity="0.6"
-        />
-        <circle cx="330" cy="130" r="4" fill="#0A9AA8" />
-        <circle cx="200" cy="190" r="3" fill="#0A9AA8" opacity="0.7" />
-        <g transform="translate(120,120)">
-          <rect x="-6" y="52" width="92" height="6" rx="2" fill="#1F2328" opacity="0.15" />
-          <path d="M0 60 V20 L40 -10 L80 20 V60 Z" fill="#ffffff" stroke="#1F2328" strokeWidth="2.5" strokeLinejoin="round" />
-          <g transform="translate(10,-2) rotate(-18)">
-            <rect x="0" y="0" width="46" height="26" rx="2" fill="#0A9AA8" opacity="0.85" />
-            <line x1="0" y1="8.6" x2="46" y2="8.6" stroke="#E1F5F7" strokeWidth="1" />
-            <line x1="0" y1="17.2" x2="46" y2="17.2" stroke="#E1F5F7" strokeWidth="1" />
-            <line x1="15.3" y1="0" x2="15.3" y2="26" stroke="#E1F5F7" strokeWidth="1" />
-            <line x1="30.6" y1="0" x2="30.6" y2="26" stroke="#E1F5F7" strokeWidth="1" />
-          </g>
-          <path d="M44 26 L28 46 H40 L26 68 L54 42 H42 Z" fill="#E39A00" />
-        </g>
-        <g transform="translate(300,60)" opacity="0.9">
-          <circle cx="0" cy="0" r="16" fill="#FBF3DE" stroke="#E39A00" strokeWidth="2" />
-          {Array.from({ length: 8 }).map((_, i) => {
-            const a = (i * Math.PI) / 4;
-            const x1 = Math.cos(a) * 22, y1 = Math.sin(a) * 22;
-            const x2 = Math.cos(a) * 28, y2 = Math.sin(a) * 28;
-            return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#E39A00" strokeWidth="2" strokeLinecap="round" />;
-          })}
-        </g>
-      </g>
-      </svg>
-    </div>
-  );
-}
-
-function Photo({ label, h = "h-44" }: { label: string; h?: string }) {
-  return (
-    <div className={`flex ${h} w-full items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-center text-sm text-slate-400`}>
-      <div>
-        <div className="text-2xl">📷</div>
-        <div className="mt-1">{label}</div>
-      </div>
-    </div>
-  );
-}
-
-function CardWatermark({ variant }: { variant: "clock" | "sun" | "data" }) {
-  const cls = "pointer-events-none absolute -right-5 -bottom-5 h-32 w-32 opacity-[0.07]";
-  if (variant === "clock") {
-    return (
-      <svg viewBox="0 0 100 100" className={cls} aria-hidden>
-        <circle cx="50" cy="50" r="42" fill="none" stroke="#0A9AA8" strokeWidth="6" />
-        <line x1="50" y1="50" x2="50" y2="24" stroke="#0A9AA8" strokeWidth="6" strokeLinecap="round" />
-        <line x1="50" y1="50" x2="70" y2="60" stroke="#0A9AA8" strokeWidth="6" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (variant === "sun") {
-    return (
-      <svg viewBox="0 0 100 100" className={cls} aria-hidden>
-        <circle cx="50" cy="50" r="22" fill="none" stroke="#E39A00" strokeWidth="6" />
-        {Array.from({ length: 8 }).map((_, i) => {
-          const a = (i * Math.PI) / 4;
-          const x1 = 50 + Math.cos(a) * 32, y1 = 50 + Math.sin(a) * 32;
-          const x2 = 50 + Math.cos(a) * 44, y2 = 50 + Math.sin(a) * 44;
-          return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#E39A00" strokeWidth="6" strokeLinecap="round" />;
-        })}
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 100 100" className={cls} aria-hidden>
-      <circle cx="30" cy="70" r="6" fill="#0A9AA8" />
-      <circle cx="55" cy="45" r="6" fill="#0A9AA8" />
-      <circle cx="80" cy="60" r="6" fill="#0A9AA8" />
-      <circle cx="70" cy="25" r="6" fill="#0A9AA8" />
-      <path d="M30 70 L55 45 L80 60 L70 25" fill="none" stroke="#0A9AA8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-const CASES = [
-  {
-    title: "전기는 이제 ‘언제 쓰느냐’가 중요",
-    body: ["유럽에서는 시간에 따라 전기요금이 달라지고,", "남는 태양광 전력을 판매하는 가정도 늘고 있음"],
-    watermark: "clock" as const,
-  },
-  {
-    title: "태양광으로 수익 창출",
-    body: ["생산한 전력을 언제 사용하고, 얼마나 남기고,", "어떻게 활용하느냐에 따라 경제성이 달라짐"],
-    watermark: "sun" as const,
-  },
-  {
-    title: "한국도 전력 데이터를 활용 가능",
-    body: ["AMI 구축으로 가정의 전력 데이터를 활용할 기반은 충분 이제 이 데이터를 실제 절감과 의사결정으로 연결해야 함"],
-    watermark: "data" as const,
-  },
-];
-
-const ROLES = [
-  {
-    eng: "Trade",
-    color: "text-amber",
-    border: "border-amber/50",
-    bg: "bg-amber-soft",
-    sub: "전력 거래",
-    title: "더 유리한 시간에 전력을 활용하세요",
-    body: ["전력 가격과 태양광 발전량을 확인하고", "구매·판매 시점을 판단할 수 있습니다."],
-  },
-  {
-    eng: "Save",
-    color: "text-teal",
-    border: "border-teal/50",
-    bg: "bg-teal-soft",
-    sub: "전기요금 절감",
-    title: "이번 달 전기요금을 미리 확인하세요",
-    body: ["예상 사용량과 누진 구간을 분석해", "요금이 크게 늘기 전에 알려드립니다."],
-  },
-  {
-    eng: "Protect",
-    color: "text-danger",
-    border: "border-danger/50",
-    bg: "bg-danger-soft",
-    sub: "이상 사용 감지",
-    title: "평소와 다른 전력 사용을 찾아냅니다",
-    body: ["가전별 전력 패턴을 분석해", "평소와 다른 사용이 발생하면 알려드립니다."],
-  },
-];
+const BP = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+const photo = (name: string) => `${BP}/img/photos/${name}.jpg`;
 
 export default function Home() {
   return (
-    <div className="space-y-12">
-      {/* 히어로 */}
-      <section className="card relative overflow-hidden">
-        <HeroBg />
-        <div className="relative grid gap-6 px-8 py-6 md:grid-cols-[1.45fr_1fr] md:px-10 md:py-7">
-          <div className="self-center">
-            <div className="badge bg-amber-soft text-amber">
-              ① 사회문제 해결을 위한 AI · 융합·응용기술 아이디어
-            </div>
-            <p className="mt-1.5 text-base font-semibold text-slate-500">
-              WattWise Pi — 엣지 AI 기반 가정용 전력 예측·맞춤형 절전 비서
-            </p>
-            <h1 className="mt-3 whitespace-nowrap text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-[2.1rem] lg:text-[2.6rem] xl:text-[2.9rem]">
-              우리 집 전력, <span className="text-amber">한눈에</span> 보고 <span className="text-teal">똑똑하게</span> 관리하세요
+    <div className="bleed -mt-8 -mb-8 bg-white">
+      <section className="relative min-h-[640px] overflow-hidden bg-[#FAF6EC] lg:min-h-[700px]">
+        <Image src={photo("family-kitchen")} alt="" fill unoptimized className="hidden scale-110 object-cover blur-2xl lg:block" />
+        <div className="absolute inset-0 hidden bg-gradient-to-r from-[#FAF6EC]/70 via-[#FAF6EC]/45 to-[#FAF6EC]/15 lg:block" />
+        <div className="absolute inset-0 lg:left-[30%] lg:[mask-image:linear-gradient(to_right,transparent,black_20%)]">
+          <Image src={photo("family-kitchen")} alt="주방에 모여 사진을 함께 보는 가족" fill priority unoptimized className="object-cover object-[60%_30%] lg:object-[35%_40%]" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#FAF6EC] via-[#FAF6EC]/90 via-45% to-transparent lg:hidden" />
+        </div>
+        <p className="absolute bottom-3 right-4 z-10 rounded-full bg-black/45 px-2.5 py-1 text-[10px] leading-4 text-white/90 backdrop-blur">사진 <a href="https://commons.wikimedia.org/wiki/File:A_family_gathered_in_the_kitchen_at_home_looking_at_photographs_(16308914556).jpg" target="_blank" rel="noreferrer" className="underline">Personal Creations</a>, <a href="https://creativecommons.org/licenses/by/2.0" target="_blank" rel="noreferrer" className="underline">CC BY 2.0</a></p>
+        <div className="relative mx-auto flex min-h-[640px] max-w-6xl items-end px-4 pb-14 pt-10 lg:min-h-[700px] lg:items-center lg:py-12">
+          <div className="max-w-xl">
+            <h1 className="break-keep text-4xl font-black leading-[1.35] tracking-[-0.03em] text-ink md:text-5xl md:leading-[1.35] lg:text-[3.4rem]">
+              전기요금부터<br />에너지 효율까지<br />스마트하게
             </h1>
-            <div className="mt-3 max-w-xl text-base leading-relaxed text-slate-600">
-              <p className="text-xl font-bold text-ink">사용량 확인부터 태양광 수익 계산까지</p>
-              <ul className="mt-1.5 space-y-1">
-                <li>· 지금 우리 집은 전기를 얼마나 쓰고 있을까요?</li>
-                <li>· 태양광을 설치하면 전기요금은 얼마나 줄어들까요?</li>
-                <li>· 남는 전력은 판매하면 얼마를 받을 수 있을까요?</li>
-              </ul>
-              <p className="mt-2 font-bold">전력 데이터를 바탕으로 절감액과 예상 수익을 직접 확인해보세요.</p>
+            <p className="mt-6 break-keep text-base font-semibold leading-8 text-ink md:text-lg">
+              전력 사용량부터 예상 전기요금까지,<br />에너지 사용 현황을 한눈에 확인하세요.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link href="/households" className="btn !rounded-full bg-[#3D2B1F] px-7 py-3.5 text-base text-white hover:bg-[#2C1F16]">우리 집 진단 시작</Link>
+              <Link href="/analytics" className="btn !rounded-full border border-[#3D2B1F]/25 bg-white/60 px-7 py-3.5 text-base text-[#3D2B1F] hover:bg-white">요금 예측 보기</Link>
             </div>
-          </div>
-          <div className="self-center">
-            <HeroArt h="h-64 md:h-72 lg:h-80" />
           </div>
         </div>
       </section>
 
-      {/* What We Do */}
-      <section>
-        <div className="eyebrow !text-ink text-center text-2xl normal-case tracking-normal md:text-3xl">전력 관리, 한곳에서</div>
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          {ROLES.map((r) => (
-            <div key={r.eng} className={`card border-t-4 p-6 ${r.border}`}>
-              <div className={`text-base font-bold ${r.color}`}>{r.sub}</div>
-              <div className="mt-2 text-[1.05rem] font-bold text-ink">{r.title}</div>
-              <p className="mt-1.5 text-sm leading-relaxed text-slate-500">
-                {r.body.map((line, i) => (
-                  <span key={i}>
-                    {line}
-                    {i < r.body.length - 1 && <br />}
-                  </span>
-                ))}
-              </p>
-            </div>
-          ))}
+      <section className="mx-auto max-w-6xl px-4 py-16 md:py-20">
+        <div className="rounded-[2rem] bg-[#FAF6EC] px-6 py-10 md:px-12 md:py-12">
+        <h2 className="text-center text-4xl font-black tracking-[-0.03em] text-ink md:text-[2.75rem]">WattWise</h2>
+        <div className="mt-10 grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6">
+          <Tile href="/analytics" image={photo("kitchen-laptop")} title="사용량·요금 예측" body="내일 24시간, 이번 달 요금" />
+          <Tile href="/households" image={photo("feature-kettle")} title="가족 안부 확인" body="평소와 다른 생활 신호" />
+          <Tile href="/solar" image={photo("solar-roof")} title="태양광 설치 계산" body="발전량과 손익분기" />
+          <Tile href="/trade" image={photo("power-lines")} title="남는 전기 거래" body="잉여 전력 판매 체험" />
+        </div>
         </div>
       </section>
 
-      {/* 전력은 이제 사고파는 것 */}
-      <section>
-        <h2 className="section-title text-center text-2xl md:text-3xl">전력을 사고파는 시대가 시작됐습니다</h2>
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          {CASES.map((c) => (
-            <div key={c.title} className="card relative overflow-hidden p-6 text-center">
-              <CardWatermark variant={c.watermark} />
-              <div className="relative text-lg font-bold text-ink">{c.title}</div>
-              <p className="relative mt-1.5 text-sm leading-relaxed text-slate-500">
-                {c.body.map((line, i) => (
-                  <span key={i}>
-                    {line}
-                    {i < c.body.length - 1 && <br />}
-                  </span>
-                ))}
-              </p>
-            </div>
-          ))}
+      <section className="bg-white">
+        <div className="mx-auto max-w-6xl space-y-16 px-4 pb-6 md:space-y-24">
+          <Feature
+            image={photo("feature-app")}
+            alt="휴대폰과 노트북에 띄운 가전별 전력 사용량 대시보드"
+            title={<>이번 달 전기요금,<br />미리 예측하고 아껴 보세요</>}
+            points={["내일 24시간 전력 사용량을 시간대별로 예측", "누진 구간까지 남은 사용량을 확인", "에어컨·TV·세탁기 등 주요 가전의 전력 소비를 분석"]}
+            actions={[{ href: "/analytics", label: "요금 예측 보기" }]}
+          />
+
+          <Feature
+            reverse
+            image={photo("feature-kettle")}
+            alt="거실 탁자 위 전기포트와 TV를 보며 차를 마시는 사람"
+            title={<>멀리 있어도,<br />부모님의 일상을 살펴보세요</>}
+            points={["집 안 기기의 전력 사용 패턴을 학습", "TV·전기포트 등의 활동 변화가 감지되면 알림", "전력 데이터는 집 안에서 처리해 개인정보를 보호"]}
+            actions={[{ href: "/households", label: "안부 신호 보기" }]}
+          />
+
+          <Feature
+            image={photo("feature-solar-house")}
+            alt="지붕에 태양광 패널을 얹은 단독주택"
+            title={<>우리 집 태양광,<br />얼마나 이득일까요?</>}
+            points={["주소와 지붕 조건을 바탕으로 연간 발전량을 예측", "예상 설치비와 투자 회수 기간을 확인", "남는 전력의 판매 과정을 직접 체험"]}
+            actions={[{ href: "/solar", label: "태양광 계산하기" }, { href: "/trade", label: "거래 체험", ghost: true }]}
+          />
+        </div>
+      </section>
+
+      <section className="bg-white">
+        <div className="mx-auto max-w-6xl px-4 pb-20">
+        <div className="flex flex-col items-center justify-center gap-4 py-6 sm:flex-row sm:gap-10">
+          <div className="relative h-48 w-44 md:h-60 md:w-52">
+            <Image src={`${BP}/img/wattwise-ai-consultant.png`} alt="전력 AI 상담사 와티" fill unoptimized className="object-contain drop-shadow-xl" />
+          </div>
+          <div>
+            <Link href="/chat" className="group inline-flex items-center gap-3 rounded-full bg-amber px-9 py-4 text-xl font-black text-white shadow-lg shadow-amber/30 transition hover:-translate-y-0.5 hover:brightness-105 hover:shadow-xl md:px-12 md:py-5 md:text-2xl">
+              와티에게 물어보기
+              <span className="transition group-hover:translate-x-1" aria-hidden>→</span>
+            </Link>
+          </div>
+        </div>
         </div>
       </section>
     </div>
+  );
+}
+
+function Tile({ href, image, title, body }: { href: string; image: string; title: string; body: string }) {
+  return (
+    <Link href={href} className="group">
+      <div className="relative aspect-[4/3] overflow-hidden rounded-3xl"><Image src={image} alt="" fill unoptimized className="object-cover transition duration-500 group-hover:scale-105" /></div>
+      <div className="mt-3 text-base font-black text-ink md:text-lg">{title}</div>
+      <div className="mt-0.5 text-xs text-slate-500 md:text-sm">{body}</div>
+    </Link>
+  );
+}
+
+function Feature({ image, alt, credit, title, points, actions, reverse }: { image: string; alt: string; credit?: React.ReactNode; title: React.ReactNode; points: string[]; actions: { href: string; label: string; ghost?: boolean }[]; reverse?: boolean }) {
+  return (
+    <article className="grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
+      <div className={`relative aspect-[4/3] overflow-hidden rounded-[2rem] ${reverse ? "lg:order-2" : ""}`}>
+        <Image src={image} alt={alt} fill unoptimized className="object-cover" />
+        {credit && <p className="absolute bottom-3 left-4 rounded-full bg-black/45 px-2.5 py-1 text-[10px] leading-4 text-white/90 backdrop-blur">{credit}</p>}
+      </div>
+      <div className={reverse ? "lg:order-1" : ""}>
+        <h2 className="break-keep text-3xl font-black leading-[1.2] tracking-[-0.03em] text-ink md:text-4xl">{title}</h2>
+        <ul className="mt-6 space-y-3">
+          {points.map((p) => (
+            <li key={p} className="flex items-start gap-3 text-base leading-7 text-ink">
+              <svg viewBox="0 0 24 24" className="mt-1 h-5 w-5 shrink-0 text-teal" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 12.5l5 5L20 6.5" /></svg>
+              <span className="break-keep">{p}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+          {actions.map((a) => (
+            <Link key={a.href} href={a.href} className={`${a.ghost ? "btn-ghost" : "btn-primary"} flex-1 !rounded-2xl py-4 text-lg`}>{a.label}</Link>
+          ))}
+        </div>
+      </div>
+    </article>
   );
 }

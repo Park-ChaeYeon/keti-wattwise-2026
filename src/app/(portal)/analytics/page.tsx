@@ -21,108 +21,109 @@ import {
   tierOf,
   daysToNextTier,
   applianceBreakdown,
-  solar,
-  SOLAR_DEFAULT,
-  hourlyProfile,
-  weekdayProfile,
-  monthlyTrend,
-  usageHeatmap,
   won,
-  type SolarInput,
 } from "@/lib/domain";
+import {
+  buildBenchmarkAnalysis,
+  type BenchmarkHouse,
+  type HouseholdMeta,
+} from "@/features/analytics/benchmark";
 
 const AMBER = "#E39A00";
 const TEAL = "#0A9AA8";
 const INK = "#1F2328";
 
-const APPLIANCE_ICONS: Record<string, string> = { tv: "📺", 에어컨: "❄️", 제습기: "💧", 세탁기: "🧺" };
-const HOUSEHOLD: Record<string, string> = { 정빈: "1인가구", 진규: "1인가구", 채연: "4인가구" };
-
-type ApplianceMeta = { id: string; label: string; seriesIds: string[] };
-type ForecastPoint = { timestamp: string; actual?: number; prediction_kwh?: number; "0.1"?: number; "0.5"?: number; "0.9"?: number };
-type ForecastResult = { seriesId: string; elapsedSeconds: number; history: ForecastPoint[]; forecast: ForecastPoint[] };
-type ForecastState = { loading: boolean; error?: string; data?: ForecastResult };
-
-function buildApplianceChartData(result: ForecastResult) {
-  const history = result.history.slice(-48).map((point) => ({ t: point.timestamp, actual: point.actual, pred: null as number | null, lo: null as number | null, hi: null as number | null }));
-  const last = history.at(-1);
-  const forecast = result.forecast.map((point) => {
-    const p = point["0.5"] ?? point.prediction_kwh ?? 0;
-    return { t: point.timestamp, actual: null as number | null, pred: p, lo: point["0.1"] ?? p, hi: point["0.9"] ?? p };
-  });
-  return last ? [...history, { ...last, pred: last.actual ?? null, lo: last.actual ?? null, hi: last.actual ?? null }, ...forecast] : forecast;
-}
-
 export default function AnalyticsPage() {
   const [monthKwh, setMonthKwh] = useState(366);
-  const [sol, setSol] = useState<SolarInput>(SOLAR_DEFAULT);
-  const [appliances, setAppliances] = useState<ApplianceMeta[]>([]);
-  const [selectedAppliance, setSelectedAppliance] = useState("");
-  const [selectedSeries, setSelectedSeries] = useState("");
-  const [forecast, setForecast] = useState<ForecastState>({ loading: true });
+  const [households, setHouseholds] = useState<HouseholdMeta[]>([]);
+  const [selectedHousehold, setSelectedHousehold] = useState("");
+  const [householdForecast, setHouseholdForecast] = useState<{ loading: boolean; error?: string }>({ loading: true });
+  const [benchmark, setBenchmark] = useState<BenchmarkHouse[]>([]);
+  const [benchmarkId, setBenchmarkId] = useState("");
+  const [fromDay, setFromDay] = useState(1);
+  const [toDay, setToDay] = useState(31);
 
   useEffect(() => {
-    fetch("/api/deploy/forecast")
+    fetch("/api/household-forecast")
       .then((res) => res.json())
-      .then((data: { appliances: ApplianceMeta[] }) => {
-        const list = data.appliances ?? [];
-        setAppliances(list);
-        setSelectedAppliance(list[0]?.id ?? "");
-        setSelectedSeries(list[0]?.seriesIds[0] ?? "");
+      .then((data: { houses?: HouseholdMeta[]; error?: string }) => {
+        if (data.error) throw new Error(data.error);
+        const list = data.houses ?? [];
+        setHouseholds(list);
       })
-      .catch(() => setForecast({ loading: false, error: "실측 목록을 불러오지 못했습니다." }));
+      .catch((error: Error) => setHouseholdForecast({ loading: false, error: error.message }));
   }, []);
 
   useEffect(() => {
-    if (!selectedAppliance || !selectedSeries) return;
+    if (!selectedHousehold) return;
     let cancelled = false;
-    setForecast({ loading: true });
-    fetch("/api/deploy/forecast", {
+    setHouseholdForecast({ loading: true });
+    fetch("/api/household-forecast", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ appliance: selectedAppliance, seriesId: selectedSeries }),
+      body: JSON.stringify({ houseId: selectedHousehold }),
     })
       .then((res) => res.json())
-      .then((result: ForecastResult & { error?: string }) => {
+      .then((data: { forecast?: { "0.5": number; prediction_kwh: number }[]; error?: string }) => {
         if (cancelled) return;
-        setForecast(result.error ? { loading: false, error: result.error } : { loading: false, data: result });
+        if (data.error || !data.forecast?.length) throw new Error(data.error ?? "예측 결과가 없습니다.");
+        const daily = data.forecast.reduce((sum, point) => sum + (point["0.5"] ?? point.prediction_kwh ?? 0), 0);
+        setMonthKwh(Math.max(1, Math.round(daily * 30)));
+        setHouseholdForecast({ loading: false });
       })
-      .catch((e: Error) => {
-        if (cancelled) return;
-        setForecast({ loading: false, error: e.message });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedAppliance, selectedSeries]);
+      .catch((error: Error) => { if (!cancelled) setHouseholdForecast({ loading: false, error: error.message }); });
+    return () => { cancelled = true; };
+  }, [selectedHousehold]);
 
-  const activeAppliance = appliances.find((a) => a.id === selectedAppliance);
-
-  function chooseAppliance(id: string) {
-    const next = appliances.find((a) => a.id === id);
-    setSelectedAppliance(id);
-    setSelectedSeries(next?.seriesIds[0] ?? "");
-  }
+  useEffect(() => {
+    fetch("/api/benchmark")
+      .then((res) => res.json())
+      .then((data: { houses?: BenchmarkHouse[] }) => {
+        const houses = data.houses ?? [];
+        setBenchmark(houses);
+        const selected = houses[Math.floor(Math.random() * houses.length)];
+        setBenchmarkId(selected?.id ?? "");
+        setSelectedHousehold(selected?.id ?? "");
+      })
+      .catch(() => setBenchmark([]));
+  }, []);
 
   const b = bill(monthKwh);
   const tier = tierOf(monthKwh);
   const dailyAvg = monthKwh / 30;
   const nxt = daysToNextTier(monthKwh, dailyAvg);
   const appl = useMemo(() => applianceBreakdown(monthKwh), [monthKwh]);
-  const s = useMemo(() => solar(sol), [sol]);
-  const hp = useMemo(() => hourlyProfile(), []);
-  const wp = useMemo(() => weekdayProfile(), []);
-  const mt = useMemo(() => monthlyTrend(), []);
-  const heat = useMemo(() => usageHeatmap(), []);
+  const selectedHouseholdMeta = households.find((house) => house.id === selectedHousehold);
+  const selectedBenchmark = benchmark.find((house) => house.id === benchmarkId);
+  const eda = useMemo(
+    () => buildBenchmarkAnalysis(selectedBenchmark, fromDay, toDay),
+    [selectedBenchmark, fromDay, toDay],
+  );
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="section-title">🔋 전력 분석 대시보드</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          예측 · 누진 경고 · 가전별 분해 · 태양광 손익분기 · 탐색적 데이터 분석(EDA). 모든 수치는 시뮬레이션/예시 단가입니다.
-        </p>
-      </div>
+      <section className="relative overflow-hidden rounded-[2rem] bg-[#11181c] px-7 py-9 text-white shadow-pop md:px-10 md:py-11">
+        <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-teal/20 blur-3xl" />
+        <div className="absolute -bottom-28 left-1/3 h-64 w-64 rounded-full bg-amber/15 blur-3xl" />
+        <div className="relative grid items-center gap-8 lg:grid-cols-[1fr_0.42fr]">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[#54dbe6]"><span className="h-2 w-2 rounded-full bg-teal" />24-hour energy forecast</div>
+            <h1 className="mt-5 break-keep text-3xl font-black leading-tight tracking-[-0.035em] md:text-5xl">내일의 전력 사용량을<br /><span className="text-[#54dbe6]">오늘 미리 확인합니다.</span></h1>
+            <p className="mt-5 max-w-2xl break-keep text-sm leading-7 text-white/60">최근 전력 사용 흐름으로 다음 24시간을 예측하고, 예상 요금과 누진 구간 변화를 한눈에 보여드립니다.</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-5 backdrop-blur">
+            <div className="text-xs font-bold text-white/40">분석 기준</div>
+            <div className="mt-2 text-3xl font-black text-[#54dbe6]">NEXT 24H</div>
+            <p className="mt-3 break-keep text-xs leading-6 text-white/45">사용량 예측에서 월 예상 요금과 누진 구간까지 이어서 계산합니다.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* 분석 대상 정보 */}
+      <section className="card flex flex-wrap items-center justify-between gap-4 p-5">
+        <div><div className="text-xs font-bold uppercase tracking-[0.14em] text-teal">Analysis data</div><div className="mt-1 text-lg font-black">최진규님</div><div className="mt-1 text-xs text-slate-500">{selectedHouseholdMeta ? `${selectedHouseholdMeta.type} · ${selectedHouseholdMeta.area}` : "분석 데이터를 불러오는 중"}</div></div>
+        <div className={`badge ${householdForecast.error ? "bg-danger-soft text-danger" : "bg-teal-soft text-teal"}`}>{householdForecast.loading ? "사용량 분석 중…" : householdForecast.error ?? "최근 실측 기반 분석 완료"}</div>
+      </section>
 
       {/* KPI */}
       <div className="grid gap-4 md:grid-cols-4">
@@ -135,12 +136,6 @@ export default function AnalyticsPage() {
           tone="text-teal"
           sub={nxt ? `현재 추세로 약 ${nxt.days.toFixed(0)}일 후 ${nxt.nextTier}구간` : "3구간 유지 중"}
         />
-      </div>
-
-      {/* month usage slider */}
-      <div className="card p-5">
-        <div className="label">이번 달 예상 사용량 조절 · {monthKwh}kWh</div>
-        <input type="range" min={100} max={550} value={monthKwh} onChange={(e) => setMonthKwh(+e.target.value)} className="w-full accent-ink" />
       </div>
 
       {/* 누진 경고 바 */}
@@ -159,79 +154,10 @@ export default function AnalyticsPage() {
         </div>
       </section>
 
-      {/* 예측 */}
-      <section className="card p-5">
-        <div className="text-sm font-bold">가전별 사용량 예측 · Chronos-2 (자취방 실측)</div>
-        <div className="mt-1 text-xs text-slate-400">최근 48시간 실측(진한 선) + 향후 24시간 예측(주황 점선·10–90% 불확실성 밴드)</div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          {appliances.map((a) => (
-            <button
-              key={a.id}
-              onClick={() => chooseAppliance(a.id)}
-              className={`rounded-xl border px-3 py-2 text-sm transition ${selectedAppliance === a.id ? "border-amber bg-amber-soft font-bold text-ink" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
-            >
-              <span className="mr-1.5">{APPLIANCE_ICONS[a.id]}</span>
-              {a.id === "tv" ? "TV" : a.id}
-            </button>
-          ))}
-        </div>
-
-        {activeAppliance && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {activeAppliance.seriesIds.map((sid) => {
-              const person = sid.split("_")[0];
-              return (
-                <button
-                  key={sid}
-                  onClick={() => setSelectedSeries(sid)}
-                  className={`rounded-lg border px-2.5 py-1.5 text-xs transition ${selectedSeries === sid ? "border-teal bg-teal-soft font-bold text-teal" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}
-                >
-                  {person} · {HOUSEHOLD[person] ?? "가구 정보 없음"}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="mt-4 rounded-xl border border-slate-200 p-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-bold">
-              <span className="mr-1.5">{APPLIANCE_ICONS[selectedAppliance]}</span>
-              {selectedAppliance === "tv" ? "TV" : selectedAppliance}
-            </div>
-            {forecast.data && <div className="text-[11px] text-slate-400">{forecast.data.seriesId} · 추론 {forecast.data.elapsedSeconds.toFixed(1)}초</div>}
-          </div>
-          <div className="mt-2 h-64">
-            {forecast.loading ? (
-              <div className="flex h-full items-center justify-center text-xs text-slate-400">
-                <span className="mr-2 h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-500" />
-                모델 예측 중… (첫 실행은 로딩으로 시간이 걸릴 수 있어요)
-              </div>
-            ) : forecast.error ? (
-              <div className="flex h-full items-center justify-center px-3 text-center text-xs text-danger">{forecast.error}</div>
-            ) : forecast.data ? (
-              <ResponsiveContainer>
-                <ComposedChart data={buildApplianceChartData(forecast.data)} margin={{ left: -8, right: 8, top: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" />
-                  <XAxis dataKey="t" hide />
-                  <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} width={46} tickFormatter={(v) => v.toFixed(2)} />
-                  <Tooltip formatter={(v: number | null) => (v == null ? "-" : `${v.toFixed(3)}kWh`)} />
-                  <Area dataKey="lo" stroke="none" fill="transparent" isAnimationActive={false} />
-                  <Area dataKey="hi" stroke="none" fill={AMBER} fillOpacity={0.14} isAnimationActive={false} />
-                  <Line dataKey="actual" stroke={INK} strokeWidth={2.5} dot={false} name="실측" isAnimationActive={false} />
-                  <Line dataKey="pred" stroke={AMBER} strokeWidth={2.5} strokeDasharray="5 4" dot={false} name="예측" isAnimationActive={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            ) : null}
-          </div>
-        </div>
-      </section>
-
       {/* 가전별 분해 */}
       <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
         <div className="card p-5">
-          <div className="text-sm font-bold">가전별 사용량 분해 (합성 NILM)</div>
+          <div className="text-sm font-bold">가전별 사용량 분해</div>
           <div className="mt-1 text-xs text-slate-400">이번 달 {monthKwh}kWh 기준 · 파레토 정렬</div>
           <div className="mt-4 h-72">
             <ResponsiveContainer>
@@ -265,50 +191,24 @@ export default function AnalyticsPage() {
         </div>
       </section>
 
-      {/* 태양광 손익분기 */}
-      <section className="card p-5">
-        <div className="text-sm font-bold">☀️ 태양광 손익분기 (BEP) 계산기</div>
-        <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1.3fr]">
-          <div className="space-y-4">
-            <Slider label={`패널 수 · ${sol.panels}장 (≈${s.capacityKw.toFixed(2)}kW)`} min={1} max={16} v={sol.panels} on={(v) => setSol({ ...sol, panels: v })} />
-            <Slider label={`절감 단가 · ${sol.savePerKwh}원/kWh`} min={120} max={310} v={sol.savePerKwh} on={(v) => setSol({ ...sol, savePerKwh: v })} />
-            <Slider label={`설치 단가 · ${(sol.costPerKw / 10000).toFixed(0)}만원/kW`} min={1000000} max={2500000} step={50000} v={sol.costPerKw} on={(v) => setSol({ ...sol, costPerKw: v })} />
-            <Slider label={`보조금 · ${(sol.subsidy / 10000).toFixed(0)}만원`} min={0} max={2000000} step={50000} v={sol.subsidy} on={(v) => setSol({ ...sol, subsidy: v })} />
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <Mini label="설치비" value={won(s.install)} />
-              <Mini label="연간 발전량" value={`${s.annualGen.toFixed(0)}kWh`} />
-              <Mini label="연간 절감액" value={won(s.annualSaving)} />
-              <Mini label="손익분기" value={isFinite(s.bepYears) ? `${s.bepYears.toFixed(1)}년` : "—"} tone="text-amber" />
-            </div>
-          </div>
-          <div className="h-72">
-            <ResponsiveContainer>
-              <LineChart data={s.cumulative} margin={{ left: 8, right: 12, top: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" />
-                <XAxis dataKey="year" tick={{ fontSize: 11, fill: "#94a3b8" }} unit="년" />
-                <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} width={54} tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} />
-                <Tooltip formatter={(v: number) => won(v)} labelFormatter={(y) => `${y}년차`} />
-                <ReferenceLine y={s.install} stroke="#94a3b8" strokeDasharray="4 4" label={{ value: "설치비", fontSize: 10, fill: "#94a3b8" }} />
-                {isFinite(s.bepYears) && <ReferenceLine x={Math.round(s.bepYears)} stroke={AMBER} strokeDasharray="4 4" label={{ value: "BEP", fontSize: 10, fill: AMBER }} />}
-                <Line dataKey="saving" stroke={TEAL} strokeWidth={2.5} dot={false} name="누적 절감액" isAnimationActive={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </section>
-
       {/* EDA */}
       <section className="space-y-4">
         <div>
           <h2 className="section-title">📊 탐색적 데이터 분석 (EDA)</h2>
-          <p className="mt-1 text-sm text-slate-500">사용 패턴을 여러 각도로 시각화합니다. 시간대·요일·월별·요일×시간 히트맵.</p>
+          <p className="mt-1 text-sm text-slate-500">연결된 실측 데이터를 기간별·시간대별로 분석합니다.</p>
         </div>
+        <div className="card grid gap-4 p-5 md:grid-cols-2">
+          <label><span className="label">시작일 · {fromDay}일차</span><input className="w-full accent-ink" type="range" min={1} max={31} value={fromDay} onChange={(e) => setFromDay(+e.target.value)} /></label>
+          <label><span className="label">종료일 · {toDay}일차</span><input className="w-full accent-ink" type="range" min={1} max={31} value={toDay} onChange={(e) => setToDay(+e.target.value)} /></label>
+          {selectedBenchmark && <div className="text-xs text-slate-400 md:col-span-2">실측 데이터 · {selectedBenchmark.area} · 측정 채널 {selectedBenchmark.channels}개 · 측정 시작 {selectedBenchmark.start} · 현재 {Math.min(fromDay, toDay)}~{Math.max(fromDay, toDay)}일차 선택</div>}
+        </div>
+        {!eda ? <div className="card p-8 text-center text-sm text-slate-400">실측 벤치마크 데이터를 불러오는 중입니다…</div> : <>
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="card p-5">
             <div className="text-sm font-bold">시간대별 평균 사용량</div>
             <div className="mt-3 h-56">
               <ResponsiveContainer>
-                <ComposedChart data={hp} margin={{ left: -12, right: 8 }}>
+                <ComposedChart data={eda.hourly} margin={{ left: -12, right: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" />
                   <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "#94a3b8" }} interval={2} />
                   <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} width={40} />
@@ -317,50 +217,53 @@ export default function AnalyticsPage() {
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
-            <div className="mt-1 text-xs text-slate-400">저녁 피크가 뚜렷 — 세탁·건조를 심야로 옮기면 절감 여지.</div>
+            <div className="mt-1 text-xs text-slate-400">선택 기간의 시간대별 평균(kWh)입니다.</div>
           </div>
           <div className="card p-5">
             <div className="text-sm font-bold">요일별 평균 사용량</div>
             <div className="mt-3 h-56">
               <ResponsiveContainer>
-                <BarChart data={wp} margin={{ left: -12, right: 8 }}>
+                <BarChart data={eda.weekday} margin={{ left: -12, right: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" />
                   <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#94a3b8" }} />
                   <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} width={40} domain={[0, 16]} />
                   <Tooltip formatter={(v: number) => `${v.toFixed(1)}kWh`} />
                   <Bar dataKey="kwh" radius={[6, 6, 0, 0]}>
-                    {wp.map((d, i) => (
+                    {eda.weekday.map((d, i) => (
                       <Cell key={d.day} fill={i >= 5 ? AMBER : "#cbd5e1"} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="mt-1 text-xs text-slate-400">주말(토·일) 사용량이 평일보다 높음.</div>
+            <div className="mt-1 text-xs text-slate-400">요일별 하루 평균 사용량입니다.</div>
           </div>
           <div className="card p-5">
             <div className="text-sm font-bold">월별 사용량 추세</div>
             <div className="mt-3 h-56">
               <ResponsiveContainer>
-                <LineChart data={mt} margin={{ left: -12, right: 8 }}>
+                <LineChart data={eda.daily} margin={{ left: -12, right: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" />
                   <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#94a3b8" }} />
                   <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} width={40} />
                   <Tooltip formatter={(v: number) => `${v}kWh`} />
-                  <ReferenceLine y={400} stroke="#D8432B" strokeDasharray="4 4" label={{ value: "3구간 400", fontSize: 10, fill: "#D8432B" }} />
+                  <ReferenceLine y={400} stroke="#D8432B" strokeDasharray="4 4" label={{ value: "400kWh 참고선", fontSize: 10, fill: "#D8432B" }} />
                   <Line dataKey="kwh" stroke={INK} strokeWidth={2.5} dot={{ r: 2 }} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <div className="mt-1 text-xs text-slate-400">여름(7·8월) 냉방으로 3구간 근접 — 누진 경고 집중 시기.</div>
+            <div className="mt-1 text-xs text-slate-400">선택 범위의 일별 총 사용량입니다.</div>
           </div>
           <div className="card p-5">
             <div className="text-sm font-bold">사용 히트맵 · 요일 × 시간</div>
-            <Heatmap data={heat} />
-            <div className="mt-1 text-xs text-slate-400">색이 진할수록 사용량↑ · 저녁 시간대와 주말 오후에 집중.</div>
+            <Heatmap data={eda.heat} />
+            <div className="mt-1 text-xs text-slate-400">색이 진할수록 선택 기간의 평균 사용량이 큽니다.</div>
           </div>
         </div>
+        <div className="text-xs text-slate-400">총 {eda.values.length.toLocaleString()}시간 · 선택 기간 합계 {eda.values.reduce((a, v) => a + v, 0).toFixed(1)}kWh</div>
+        </>}
       </section>
+
     </div>
   );
 }
@@ -374,23 +277,6 @@ function Kpi({ label, value, tone, sub }: { label: string; value: string; tone: 
     </div>
   );
 }
-function Mini({ label, value, tone = "text-ink" }: { label: string; value: string; tone?: string }) {
-  return (
-    <div className="rounded-lg bg-slate-50 p-3">
-      <div className="text-xs text-slate-400">{label}</div>
-      <div className={`text-sm font-bold ${tone}`}>{value}</div>
-    </div>
-  );
-}
-function Slider({ label, min, max, v, on, step = 1 }: { label: string; min: number; max: number; v: number; on: (v: number) => void; step?: number }) {
-  return (
-    <div>
-      <div className="label">{label}</div>
-      <input type="range" min={min} max={max} step={step} value={v} onChange={(e) => on(+e.target.value)} className="w-full accent-ink" />
-    </div>
-  );
-}
-
 function TierBar({ monthKwh }: { monthKwh: number }) {
   const max = 500;
   const pct = (n: number) => `${Math.min(100, (n / max) * 100)}%`;
@@ -413,6 +299,7 @@ function TierBar({ monthKwh }: { monthKwh: number }) {
 }
 
 function Heatmap({ data }: { data: { day: string; hour: number; v: number }[][] }) {
+  const max = Math.max(...data.flat().map((cell) => cell.v), 0.001);
   return (
     <div className="mt-4 space-y-1">
       {data.map((row) => (
@@ -424,7 +311,7 @@ function Heatmap({ data }: { data: { day: string; hour: number; v: number }[][] 
                 key={c.hour}
                 className="h-4 flex-1 rounded-[2px]"
                 title={`${c.day} ${c.hour}시 · ${(c.v * 100).toFixed(0)}%`}
-                style={{ background: `rgba(10,154,168,${0.06 + c.v * 0.9})` }}
+                style={{ background: `rgba(10,154,168,${0.06 + (c.v / max) * 0.9})` }}
               />
             ))}
           </div>

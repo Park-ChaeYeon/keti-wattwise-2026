@@ -10,9 +10,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-
-ROOT = Path(__file__).resolve().parent
-APPLIANCES = ("tv", "에어컨", "제습기", "세탁기")
+try:
+    from .data_store import APPLIANCES, ROOT, load_model_input
+except ImportError:  # Direct execution: python dashboard/inference.py
+    from data_store import APPLIANCES, ROOT, load_model_input
 COVARIATES = (
     "hour_sin",
     "hour_cos",
@@ -77,16 +78,11 @@ def forecast(
 ) -> pd.DataFrame:
     from chronos import Chronos2Pipeline
 
-    data_path = ROOT / "data" / appliance / "chronos_model_input.parquet"
     model_path = ROOT / "models" / appliance / "checkpoint"
-    if not data_path.exists():
-        raise FileNotFoundError(data_path)
     if not model_path.exists():
         raise FileNotFoundError(model_path)
 
-    data = pd.read_parquet(data_path)
-    data["timestamp"] = pd.to_datetime(data["timestamp"], errors="coerce")
-    data["target_kwh"] = pd.to_numeric(data["target_kwh"], errors="coerce")
+    data = load_model_input(appliance)
     context = (
         data[data["house_id"].astype(str).eq(series_id)]
         .dropna(subset=["timestamp", "target_kwh"])

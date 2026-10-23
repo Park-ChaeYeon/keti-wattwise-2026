@@ -1,132 +1,98 @@
-const BP = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+import Image from "next/image";
+import Link from "next/link";
 
-function Photo({ label, h = "h-44" }: { label: string; h?: string }) {
+const BP = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+const photo = (name: string) => `${BP}/img/photos/${name}.jpg`;
+
+export default function WhyPage() {
   return (
-    <div className={`flex ${h} w-full items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-center text-sm text-slate-400`}>
-      <div>
-        <div className="text-2xl">📷</div>
-        <div className="mt-1">{label}</div>
+    <div className="bleed -mt-8 -mb-8 bg-white">
+      <section className="relative min-h-[520px] overflow-hidden bg-ink lg:min-h-[600px]">
+        <Image src={photo("power-lines")} alt="노을 진 하늘 아래 늘어선 송전탑" fill priority unoptimized className="object-cover object-[50%_60%]" />
+        <div className="absolute inset-0 bg-black/25" />
+        <div className="relative mx-auto flex min-h-[520px] max-w-6xl items-center justify-center px-4 py-12 text-center lg:min-h-[600px]">
+          <div className="max-w-3xl">
+            <h1 className="break-keep text-3xl font-black leading-[1.35] tracking-[-0.03em] text-white md:text-5xl md:leading-[1.35] lg:text-[3.2rem]">
+              전력 데이터로, 더 나은 선택을
+            </h1>
+            <p className="mt-6 break-keep text-lg font-bold leading-8 text-white md:text-2xl md:leading-10">
+              매일 쌓이는 전력 데이터를 요금 절약부터<br className="hidden md:block" /> 안전 관리, 에너지 거래까지 연결합니다.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <div className="mx-auto max-w-6xl space-y-20 px-4 py-16 md:space-y-24 md:py-20">
+      <section>
+        <div className="mx-auto max-w-3xl text-center">
+          <h2 className="mt-4 break-keep text-3xl font-black tracking-[-0.04em] md:text-5xl">왜 지금, 전력 데이터에 주목해야 할까요?</h2>
+        </div>
+
+        <div className="mt-12 space-y-16 md:space-y-24">
+          <ReasonSection
+            title={<>전기요금은 사용한 뒤가 아니라,<br /><span className="text-[#3D2B1F]">사용하기 전에 알아야 합니다.</span></>}
+            body={<>전기요금은 고지서를 받고 나서야 부담을 실감하는 경우가 많습니다.<br className="hidden lg:block" /> 앞으로의 전력 사용량과 예상 요금을 미리 알 수 있다면,<br className="hidden lg:block" /> 요금이 커지기 전에 사용 시간과 가전 운용을 조정할 수 있습니다.</>}
+            takeaway="지난달 요금 확인에서, 내일의 사용량 예측으로."
+            href="/analytics"
+            link="24시간 사용량 예측하기"
+            photo={photo("living-room")}
+            reverse={false}
+          />
+
+          <ReasonSection
+            title={<>혼자 사는 가구가 늘어날수록,<br /><span className="text-danger">일상의 변화를 더 빨리 알아야 합니다.</span></>}
+            body={<>2024년 국내 1인 세대는 약 1,012만 세대로 전체의 42%를 차지합니다.<br className="hidden lg:block" /> 혼자 사는 가구는 평소와 다른 생활 변화가 생겨도 주변에서 바로 알아차리기 어렵습니다.<br className="hidden lg:block" /> 가전의 전력 사용 패턴을 분석하면, 평소와 다른 활동을 감지해 안부 확인이 필요한 상황을 더 일찍 파악할 수 있습니다.</>}
+            takeaway="평소를 학습하고, 평소와 다른 순간을 알립니다."
+            href="/households"
+            link="생활 이상 신호 확인하기"
+            photo={photo("apartment-windows")}
+            reverse
+          />
+
+          <ReasonSection
+            title={<>태양광으로 생산한 전력,<br /><span className="text-amber">예측을 넘어 활용까지 연결해야 합니다.</span></>}
+            body={<>태양광과 같은 분산형 에너지가 늘면서 생산한 전력을 어떻게 소비하고 활용할지에 대한 관심도 커지고 있습니다. 해외에서는 분산형 에너지와 잉여 전력 거래를 연계하는 다양한 모델이 운영되고 있으며, 국내에서도 제한적인 실증과 제도적 기반 마련이 진행되고 있습니다. 이제는 예상 발전량을 확인하는 데서 나아가, 생산한 전력의 활용 가능성과 경제성을 판단할 수 있는 서비스가 필요합니다.</>}
+            takeaway="남는 태양광의 가치를 계산하고, 더 나은 활용을 설계합니다."
+            href="/solar"
+            link="태양광 활용 가능성 보기"
+            photo={photo("freiburg-solar")}
+            credit={<>독일 프라이부르크 태양광 마을 · 사진 <a href="https://commons.wikimedia.org/wiki/File:Freiburg_071ss.jpg" target="_blank" rel="noreferrer" className="underline">Arnold Plesse</a>, <a href="https://creativecommons.org/licenses/by/3.0" target="_blank" rel="noreferrer" className="underline">CC BY 3.0</a></>}
+            reverse={false}
+          />
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] bg-[#FAF6EC] px-6 py-10 md:px-12 md:py-12">
+        <h2 className="text-center break-keep text-2xl font-black tracking-[-0.03em] text-ink md:text-4xl">지금 바로 우리 집 태양광을 계산해 보세요.</h2>
+        <form action="/solar" method="get" className="mt-8 flex flex-col gap-3 md:flex-row md:gap-6">
+          <input
+            name="q"
+            required
+            className="min-w-0 flex-1 rounded-2xl border-2 border-[#3D2B1F] bg-white px-5 py-4 text-base text-ink outline-none placeholder:text-slate-400 focus:ring-4 focus:ring-[#3D2B1F]/15"
+            placeholder="도로명 주소 (예: 서울 성북구 안암로 145)"
+            aria-label="도로명 주소"
+          />
+          <button className="rounded-2xl bg-[#3D2B1F] px-8 py-4 text-lg font-bold text-white transition hover:bg-[#2C1F16] md:w-1/3">발전량 계산하기</button>
+        </form>
+      </section>
       </div>
     </div>
   );
 }
 
-export default function WhyPage() {
+function ReasonSection({ title, body, takeaway, href, photo, credit, reverse }: { title: React.ReactNode; body: React.ReactNode; takeaway: string; href: string; link: string; photo: string; credit?: React.ReactNode; reverse: boolean }) {
   return (
-    <div className="space-y-12">
-      {/* 헤더 */}
-      <section className="card overflow-hidden">
-        <div className="p-8 md:p-10">
-          <div className="badge bg-amber-soft text-amber">왜 지금, 왜 이 방법인가</div>
-          <h1 className="mt-4 text-3xl font-extrabold leading-tight tracking-tight md:text-4xl">
-            필요성
-          </h1>
-          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-600">
-            전기는 이제 쓰기만 하는 대상이 아니라, 사고팔고 아끼고 위험을 읽어 내는 대상이 되고 있습니다.
-            이 서비스가 왜 필요한지를 정책 측면(전력시장이 향하는 방향)과 기술 측면(왜 오토인코더인가)으로 나누어 정리했습니다.
-          </p>
-        </div>
-      </section>
-
-      {/* 1. 정책적 필요성 */}
-      <section>
-        <div className="eyebrow">Policy</div>
-        <h2 className="section-title">전기를 거래하는 시대가 온다</h2>
-        <p className="section-sub">집에서 전기를 사고파는 시대이지만, 정작 가정이 쓸 도구는 없습니다.</p>
-
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <div className="card p-5">
-            <div className="text-2xl">🇪🇺</div>
-            <div className="mt-2 font-bold">유럽·영국은 이미 거래 중</div>
-            <p className="mt-1 text-sm text-slate-500">
-              요금이 30분 단위로 바뀌어 쌀 때 쓰고, 남는 태양광은 비쌀 때 되팝니다.
-              공급이 넘치는 날에는 요금이 마이너스가 되어 오히려 보상을 받고 쓰기도 합니다.
-            </p>
-          </div>
-          <div className="card p-5">
-            <div className="text-2xl">📈</div>
-            <div className="mt-2 font-bold">한국도 같은 방향으로</div>
-            <p className="mt-1 text-sm text-slate-500">
-              재생에너지가 확대되고 요금제도 개편되고 있습니다. 지능형 원격검침 인프라(AMI)도 2024년 전국 약 2,005만 호에 구축을 마쳐,
-              실시간 요금·양방향 거래의 기반이 갖춰졌습니다.
-            </p>
-          </div>
-          <div className="card p-5">
-            <div className="mt-0 text-2xl">🏠</div>
-            <div className="mt-2 font-bold">그런데 정작 쓸 도구가 없다</div>
-            <p className="mt-1 text-sm text-slate-500">
-              데이터는 이미 흐르지만, 언제 사고 언제 팔지를 가정에서 판단할 방법이 없습니다.
-              폭염 누진에 취약한 1인·저소득 가구일수록 이 격차가 큽니다.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-4 md:grid-cols-[1.2fr_1fr]">
-          <div className="card bg-ink p-6 text-white">
-            <p className="text-lg font-bold leading-snug">
-              그래서 <span className="text-amber">쌀 때 사고 비쌀 때 파는 판단</span>을,
-              집집마다 라즈베리파이가 알아서 내리도록 하는 것이 목표입니다.
-            </p>
-            <p className="mt-3 text-xs text-white/70">
-              태양광 판매, 누진 회피, 요금 절감을 한 번에. 취약계층의 요금 부담과 냉방 문제 해소로도 이어집니다.
-            </p>
-          </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`${BP}/img/eu-solar.jpg`} alt="유럽 주택 지붕의 태양광 패널" className="h-full min-h-[220px] w-full rounded-xl border border-slate-200 object-cover" />
-        </div>
-        <p className="mt-2 text-[11px] text-slate-400">이미지 · Marta Victoria · Wikimedia Commons (CC BY-SA 4.0)</p>
-      </section>
-
-      {/* 2. 방법론적 필요성 */}
-      <section>
-        <div className="eyebrow">Method</div>
-        <h2 className="section-title">왜 오토인코더인가</h2>
-        <p className="section-sub">응급·이상 상황은 정답이 붙어 있지 않기 때문에, 정상만 학습하는 방식이 적합합니다.</p>
-
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <div className="card p-6">
-            <div className="badge bg-slate-100 text-slate-600">문제</div>
-            <div className="mt-2 font-bold">정답 라벨이 없다</div>
-            <p className="mt-1 text-sm text-slate-500">
-              고독사나 응급 같은 이상은 드물고, 데이터에 &lsquo;이상&rsquo;이라고 표시된 사례가 거의 없습니다.
-              그래서 정답을 맞히는 일반적인 학습(지도학습)은 적용하기 어렵습니다.
-            </p>
-          </div>
-          <div className="card p-6">
-            <div className="badge bg-teal-soft text-teal">해법 · 오토인코더</div>
-            <div className="mt-2 font-bold">평소만 배우고, 벗어나면 잡는다</div>
-            <p className="mt-1 text-sm text-slate-500">
-              평소 전력 패턴을 압축했다가 다시 되살리도록 학습시킵니다. 평소와 비슷하면 잘 복원하지만,
-              이상이 오면 복원이 크게 어긋납니다. 그 어긋난 정도를 이상 신호로 사용하며, 별도의 정답 라벨이 필요 없습니다.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-4 card p-6">
-          <div className="font-bold">출장·여행 같은 예외는 사후에 확인한다</div>
-          <p className="mt-1 text-sm text-slate-500">
-            출장이나 여행처럼 정상이지만 이상하게 보이는 경우가 있습니다. 이런 경우는 곧바로 경보하지 않고,
-            사후에 &ldquo;3일째 사용량이 크게 줄었는데 외출 중이신가요?&rdquo;라고 확인해 걸러냅니다.
-          </p>
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-            <span className="chip bg-teal-soft text-teal">평소 학습</span>
-            <span className="text-slate-300">→</span>
-            <span className="chip bg-amber-soft text-amber">복원 어긋남 = 이상</span>
-            <span className="text-slate-300">→</span>
-            <span className="chip bg-slate-100 text-slate-600">응급 판단</span>
-            <span className="text-slate-300">→</span>
-            <span className="chip bg-slate-100 text-slate-600">예외는 사후 확인</span>
-          </div>
-        </div>
-      </section>
-
-      {/* 마무리 */}
-      <section className="card bg-gradient-to-br from-amber-soft to-teal-soft p-8 text-center">
-        <p className="mx-auto max-w-3xl text-lg font-bold leading-snug text-ink">
-          전기를 사고파는 시대에, 집에서 알아서 <span className="text-amber">거래하고</span>
-          <span className="text-teal"> 위험까지 살피는</span> 도구. 라벨 없는 문제는 오토인코더로 해결합니다.
-        </p>
-      </section>
-    </div>
+    <article className="grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
+      <div className={`relative aspect-[4/3] overflow-hidden rounded-[2rem] ${reverse ? "lg:order-2" : ""}`}>
+        <Image src={photo} alt="" fill unoptimized className="object-cover" />
+        {credit && <p className="absolute bottom-3 left-4 rounded-full bg-black/45 px-2.5 py-1 text-[10px] leading-4 text-white/90 backdrop-blur">{credit}</p>}
+      </div>
+      <div className={reverse ? "lg:order-1" : ""}>
+        <h3 className="break-keep text-3xl font-black leading-tight tracking-[-0.035em]">{title}</h3>
+        <p className="mt-5 break-keep text-base leading-8 text-ink">{body}</p>
+        <p className="mt-5 border-l-2 border-[#3D2B1F] pl-4 text-[1.3rem] font-bold leading-8 text-ink">{takeaway}</p>
+        <Link href={href} className="btn-primary mt-8 w-full !rounded-2xl py-4 text-lg">더 자세히 알아보세요</Link>
+      </div>
+    </article>
   );
 }

@@ -14,6 +14,13 @@ body {
   color: theme("colors.ink");
   font-family: theme("fontFamily.sans");
   -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+
+/* 컨테이너 안에서 화면 양 끝까지 배경을 넓히는 구역 */
+.bleed {
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
 }
 
 @layer components {

@@ -11,16 +11,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import type { ApplianceSummary as Appliance, ForecastPoint as Point } from "@/features/deploy/types";
 
-type Appliance = {
-  id: string;
-  label: string;
-  seriesIds: string[];
-  rows: number;
-  periodStart: string;
-  periodEnd: string;
-};
-type Point = { timestamp: string; actual?: number; prediction_kwh?: number; "0.1"?: number; "0.5"?: number; "0.9"?: number };
 type Result = {
   appliance: string;
   seriesId: string;
@@ -103,19 +95,19 @@ export default function ForecastLab() {
   }
 
   return (
-    <section>
-      <div className="eyebrow">Live Forecast</div>
+    <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-8">
+      <div className="eyebrow">02 · Live Forecast</div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="section-title">실측 데이터로 다음 24시간 예측</h2>
-          <p className="section-sub">자취방에서 수집한 시계열을 학습된 Chronos-2 체크포인트에 직접 입력합니다.</p>
+          <h2 className="section-title">이 데이터를 실제 모델에 넣었습니다</h2>
+          <p className="section-sub max-w-2xl break-keep">저장된 결과 이미지를 보여주는 것이 아닙니다. 가전과 실증 대상을 선택하면 로컬 Chronos-2 체크포인트가 그 자리에서 다음 24시간을 추론합니다.</p>
         </div>
         <span className="badge bg-ok-soft text-ok"><span className="h-1.5 w-1.5 rounded-full bg-ok" />로컬 추론 · 데이터 외부 전송 없음</span>
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-[300px_1fr]">
         <div className="card p-5">
-          <div className="text-sm font-bold">예측 조건</div>
+          <div className="text-sm font-bold">직접 모델 실행하기</div>
           <label className="label mt-5">가전 선택</label>
           <div className="grid grid-cols-2 gap-2">
             {appliances.map((item) => (
@@ -139,7 +131,7 @@ export default function ForecastLab() {
           {error ? (
             <div className="flex h-full min-h-[380px] items-center justify-center"><div className="max-w-md rounded-xl bg-danger-soft p-5 text-center"><div className="text-2xl">⚠️</div><div className="mt-2 text-sm font-bold text-danger">예측을 실행하지 못했습니다</div><p className="mt-1 text-xs text-slate-600">{error}</p></div></div>
           ) : !result ? (
-            <div className="flex min-h-[380px] flex-col items-center justify-center text-center"><div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-teal-soft text-3xl">〽️</div><div className="mt-4 font-bold">실제 모델을 실행해 보세요</div><p className="mt-1 max-w-sm text-xs leading-relaxed text-slate-500">가전과 실측 대상을 고르면 최근 7일 패턴과 다음 24시간 중앙 예측·불확실성 범위를 함께 보여줍니다.</p></div>
+            <div className="flex min-h-[380px] flex-col items-center justify-center text-center"><div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-teal-soft text-3xl">〽️</div><div className="mt-4 font-bold">실증 데이터에서 바로 예측합니다</div><p className="mt-2 max-w-sm break-keep text-xs leading-6 text-slate-500">가전과 대상을 선택해 실행해 보세요. 최근 336시간을 모델 입력으로 사용하고, 다음 24시간의 중앙값과 10–90% 불확실성 범위를 함께 계산합니다.</p><div className="mt-4 flex gap-2"><span className="badge bg-slate-100 text-slate-500">실데이터 입력</span><span className="badge bg-slate-100 text-slate-500">로컬 체크포인트</span><span className="badge bg-slate-100 text-slate-500">실시간 추론</span></div></div>
           ) : (
             <>
               <div className="grid grid-cols-3 gap-3">

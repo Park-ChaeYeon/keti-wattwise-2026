@@ -1,34 +1,32 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import {
   ResponsiveContainer,
-  BarChart,
   Bar,
   LineChart,
   Line,
   ComposedChart,
-  Area,
   XAxis,
   YAxis,
   Tooltip,
   CartesianGrid,
-  Cell,
   ReferenceLine,
   RadialBarChart,
   RadialBar,
   PolarAngleAxis,
 } from "recharts";
-import {
-  CITIES,
-  TARGETS,
-  simulate,
-  cityCompare,
-  type TargetKind,
-  type SolarPVInput,
-} from "@/lib/solarpv";
+import { CITIES } from "@/lib/solarpv";
 import { won } from "@/lib/domain";
+import {
+  calculateSolarPlan,
+  type HomeType,
+  type Orientation,
+  type RoofCondition,
+  type UsagePattern,
+} from "@/features/solar/calculator";
 import dynamic from "next/dynamic";
+import type { SearchedBuilding, SelectedSolarBuilding } from "@/components/BuildingSolarMap";
 
 const BuildingSolarMap = dynamic(() => import("@/components/BuildingSolarMap"), {
   ssr: false,
@@ -41,187 +39,305 @@ const AMBER = "#E39A00";
 const TEAL = "#0A9AA8";
 const OK = "#12A150";
 
-// 실제 시장가 기준 (사용자 제공 표, 단위 만원 · 정부지원 반영)
-const COST = [
-  {
-    name: "아파트 베란다형",
-    spec: "400~800W",
-    emoji: "🏢",
-    fit: "아파트·빌라 등 공동주택",
-    install: "60~100만원 (400W 평균 ~90만)",
-    subsidy: "30~72만원",
-    selfWith: 35, // 자부담(보조금 수령) 평균 만원 (10~60)
-    selfWithout: 80, // 자부담(미수령) 평균 만원 (60~100)
-    genMonth: "40~50kWh",
-    saveYear: 18, // 연 절감 만원 (월 ~1.5만)
-  },
-  {
-    name: "단독주택 주택형",
-    spec: "3kW",
-    emoji: "🏠",
-    fit: "단독주택·농가",
-    install: "493~600만원 (상한 493.1만)",
-    subsidy: "179~350만원",
-    selfWith: 193, // 자부담(보조금 수령) 평균 만원 (150~250)
-    selfWithout: 550, // 자부담(미수령) 평균 만원 (500~600)
-    genMonth: "288~400kWh",
-    saveYear: 75, // 연 절감 만원 (월 평균 ~6.3만)
-  },
-];
-
 export default function SolarPage() {
-  const [target, setTarget] = useState<TargetKind>("가정");
   const [cityIdx, setCityIdx] = useState(0);
-  const [systemKw, setSystemKw] = useState(TARGETS["가정"].systemKw);
-  const [tilt, setTilt] = useState(30);
-  const [azimuth, setAzimuth] = useState(0);
-  const [selfRate, setSelfRate] = useState(0.5);
+  const [homeType, setHomeType] = useState<HomeType>("house");
+  const [areaPyeong, setAreaPyeong] = useState(30);
+  const [residents, setResidents] = useState(3);
+  const [usagePattern, setUsagePattern] = useState<UsagePattern>("normal");
+  const [roofCondition, setRoofCondition] = useState<RoofCondition>("good");
+  const [orientation, setOrientation] = useState<Orientation>("south");
+  const [knownMonthlyKwh, setKnownMonthlyKwh] = useState("");
   const [sellPerKwh, setSellPerKwh] = useState(130);
   const [subsidyOn, setSubsidyOn] = useState(true);
+  const [locationQuery, setLocationQuery] = useState("");
+  const [searchedPlace, setSearchedPlace] = useState<SearchedBuilding | null>(null);
+  const [selectedBuilding, setSelectedBuilding] = useState<SelectedSolarBuilding | null>(null);
+  const [searchState, setSearchState] = useState<"idle" | "loading" | "error">("idle");
+  const [searchError, setSearchError] = useState("");
 
-  const t = TARGETS[target];
-  const city = CITIES[cityIdx];
-  const inp: SolarPVInput = {
-    lat: city.lat,
-    kt: city.kt,
-    systemKw,
-    tilt,
-    azimuth,
-    pr: 0.8,
-    consumptionYr: t.consumptionYr,
-    costPerKw: t.costPerKw,
-    subsidy: t.subsidy,
-    savePerKwh: 150,
-    sellPerKwh,
-    selfRate,
-  };
-  const r = useMemo(() => simulate(inp), [JSON.stringify(inp)]);
-  const cc = useMemo(() => cityCompare(inp), [systemKw, tilt, azimuth]);
+  const {
+    city, estimatedMonthlyKwh, monthlyConsumption, annualConsumption,
+    installableArea, maxPanels, orientationSetting, panelCount, systemKw,
+    panelEquipmentCost, inverterCost, structureCost, installationCost,
+    grossInstallCost, estimatedSubsidy, selfPay,
+    result: r, monthlyEnergy, selfSaving, saleRevenue, gridUse, net25,
+    buildingSaving, buildingSavingRate,
+  } = calculateSolarPlan({
+    cityIdx, homeType, areaPyeong, residents, usagePattern, roofCondition,
+    orientation, knownMonthlyKwh, sellPerKwh, subsidyOn,
+    searchedLocation: searchedPlace,
+    selectedBuilding,
+  });
 
-  function pick(k: TargetKind) {
-    setTarget(k);
-    setSystemKw(TARGETS[k].systemKw);
+  useEffect(() => {
+    const profile = { version: 1, panelCount, systemKw, annualGen: r.annualGen, annualConsumption, selfUsed: r.selfUsed, surplus: r.surplus, annualRevenue: r.annualRevenue, location: searchedPlace?.label ?? city.name, updatedAt: new Date().toISOString() };
+    try { localStorage.setItem("wattwise:solar-profile:v1", JSON.stringify(profile)); } catch { /* 브라우저 저장 불가 시 거래 화면 연동만 생략 */ }
+  }, [annualConsumption, city.name, panelCount, r.annualGen, r.annualRevenue, r.selfUsed, r.surplus, searchedPlace?.label, systemKw]);
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q")?.trim();
+    if (!q) return;
+    setLocationQuery(q);
+    void runSearch(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function searchLocation(e: FormEvent) {
+    e.preventDefault();
+    void runSearch(locationQuery);
   }
+
+  async function runSearch(query: string) {
+    if (!query.trim()) return;
+    setSearchState("loading");
+    setSearchError("");
+    setSelectedBuilding(null);
+    try {
+      const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      setSearchedPlace({ label: result.label, loc: [result.lon, result.lat], geometry: result.geometry, addressType: result.addressType });
+      setSearchState("idle");
+    } catch (error) {
+      setSearchState("error");
+      setSearchError(error instanceof Error ? error.message : "검색 결과를 불러오지 못했습니다.");
+    }
+  }
+
+  const mapSection = (
+    <section className="card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-bold">🗺️ 건물별 일조량·발전 잠재량 지도</div>
+          <div className="mt-1 text-xs text-slate-400">
+            도로명 주소의 정확한 좌표와 건물 경계를 확대해 보여줍니다. 청록색 검색 건물을 클릭하면 상세 발전·절감 정보를 확인할 수 있어요.
+          </div>
+        </div>
+        {searchedPlace && (
+          <button type="button" className="btn-ghost text-xs" onClick={() => { setSearchedPlace(null); setSelectedBuilding(null); setLocationQuery(""); }}>
+            기본 보기로
+          </button>
+        )}
+      </div>
+      {searchedPlace && <div className="mt-3 rounded-lg bg-teal-soft px-3 py-2 text-xs font-semibold text-teal">📍 {searchedPlace.label}</div>}
+      <div className="mt-3">
+        <BuildingSolarMap
+          focusIdx={selectedBuilding?.idx}
+          focusLoc={selectedBuilding?.loc ?? searchedPlace?.loc}
+          searchedBuilding={searchedPlace ?? undefined}
+          onBuildingSelect={setSelectedBuilding}
+        />
+      </div>
+      <div className="mt-2 text-[11px] text-slate-400">
+        ※ 검색 결과에 건물 경계가 제공되지 않는 주소는 정확한 좌표 주변을 대표 건물 영역으로 표시합니다. 옥상 구조물·음영을 반영한 시공 전 현장 실측이 필요합니다.
+      </div>
+    </section>
+  );
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="section-title">☀️ RE100 태양광 시뮬레이터</h1>
+        <h1 className="section-title">☀️ 가정용 태양광 시뮬레이터</h1>
         <p className="mt-1 text-sm text-slate-500">
-          위치·경사·방위에 따른 발전량을 추정하고, 자가소비 절감 + 잉여 전력 판매(전력거래) 수익으로 <b>RE100 달성률·손익분기</b>를 계산합니다.
-          <span className="ml-1 text-slate-400">모델: pvlib 방법론(청천일사·경사면 전이·PVWatts) 간이 구현.</span>
+          집 크기와 거주 인원, 전기 사용 습관, 설치 공간을 입력하면 <b>전력 사용량·권장 패널 수·예상 발전량</b>을 한 번에 계산합니다.
+          <span className="ml-1 text-slate-400">위치별 일사 조건과 지붕 방향까지 반영한 간이 설치 진단입니다.</span>
         </p>
       </div>
 
-      {/* 대상 유형 */}
-      <div className="flex flex-wrap gap-2">
-        {(Object.keys(TARGETS) as TargetKind[]).map((k) => (
-          <button key={k} onClick={() => pick(k)} className={`btn ${target === k ? "btn-primary" : "btn-ghost"}`}>
-            {k === "가정" ? "🏠 가정" : k === "기업" ? "🏢 기업" : "🏛️ 공공기관"}
-          </button>
-        ))}
-      </div>
+      <form onSubmit={searchLocation} className="card flex flex-col gap-2 p-3 sm:flex-row sm:items-center">
+        <div className="relative min-w-0 flex-1">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
+          <input
+            value={locationQuery}
+            onChange={(e) => setLocationQuery(e.target.value)}
+            className="input pl-9"
+            placeholder="도로명 주소를 입력하세요 (예: 서울 성북구 안암로 145)"
+            aria-label="태양광 분석 위치 검색"
+          />
+        </div>
+        <button className="btn-primary shrink-0" disabled={searchState === "loading"}>
+          {searchState === "loading" ? "검색 중…" : "위치 검색"}
+        </button>
+        {searchState === "error" && <div className="text-xs text-red-500 sm:w-full">{searchError}</div>}
+      </form>
+
+      {searchedPlace && mapSection}
+
+      {selectedBuilding && (
+        <section className="overflow-hidden rounded-2xl bg-ink text-white shadow-card">
+          {selectedBuilding.address && <div className="border-b border-white/10 px-6 py-4"><div className="text-xs font-semibold text-teal">검색 건물 상세</div><div className="mt-1 text-sm font-bold">{selectedBuilding.address}</div><div className="mt-1 text-xs text-white/45">좌표 {selectedBuilding.loc[1].toFixed(6)}, {selectedBuilding.loc[0].toFixed(6)} · OpenStreetMap 주소 경계 기반</div></div>}
+          <div className="grid gap-0 md:grid-cols-[1fr_1fr_0.8fr]">
+            <div className="p-6 md:p-7">
+              <div className="text-xs font-semibold text-white/55">선택 건물 연간 절감량</div>
+              <div className="mt-1 text-4xl font-black tracking-tight text-amber">{Math.min(selectedBuilding.kwh, annualConsumption).toLocaleString()}<span className="ml-1 text-lg">kWh</span></div>
+              <div className="mt-2 text-xs text-white/45">예상 발전 잠재량 {selectedBuilding.kwh.toLocaleString()}kWh 기준</div>
+            </div>
+            <div className="border-t border-white/10 p-6 md:border-l md:border-t-0 md:p-7">
+              <div className="text-xs font-semibold text-white/55">전력 사용 절감 비율</div>
+              <div className="mt-1 text-4xl font-black tracking-tight text-teal">{buildingSavingRate.toFixed(0)}%</div>
+              <div className="mt-2 text-xs text-white/45">예상 연 소비 {annualConsumption.toLocaleString()}kWh 대비</div>
+            </div>
+            <div className="border-t border-white/10 p-6 md:border-l md:border-t-0 md:p-7">
+              <div className="text-xs font-semibold text-white/55">예상 연 절감액</div>
+              <div className="mt-2 text-2xl font-extrabold">{won(buildingSaving)}</div>
+              <div className="mt-2 text-xs text-white/45">추정 옥상 {selectedBuilding.area.toLocaleString()}㎡ · {selectedBuilding.source === "search" ? "주소 건물 경계 기준" : `높이 ${selectedBuilding.h}m`}</div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="card overflow-hidden">
+        <div className="border-b border-slate-100 px-5 py-4">
+          <div className="text-sm font-bold">🏠 우리 집 설치 조건</div>
+          <div className="mt-1 text-xs text-slate-400">생활 정보와 실제 설치 공간을 바탕으로 전력 사용량과 권장 패널 수를 자동 계산합니다.</div>
+        </div>
+        <div className="grid lg:grid-cols-[1.35fr_0.85fr]">
+          <div className="grid gap-5 p-5 sm:grid-cols-2 lg:grid-cols-3">
+            <Field label="주거 형태">
+              <select value={homeType} onChange={(e) => setHomeType(e.target.value as typeof homeType)} className="input">
+                <option value="apartment">아파트 · 베란다</option>
+                <option value="villa">빌라 · 공동 옥상</option>
+                <option value="house">단독주택 · 개인 옥상</option>
+              </select>
+            </Field>
+            <Field label="집 크기">
+              <div className="relative"><input type="number" min="5" max="150" value={areaPyeong} onChange={(e) => setAreaPyeong(Math.max(5, Number(e.target.value)))} className="input pr-10" /><span className="absolute right-3 top-2 text-sm text-slate-400">평</span></div>
+            </Field>
+            <Field label="거주 인원">
+              <div className="relative"><input type="number" min="1" max="10" value={residents} onChange={(e) => setResidents(Math.max(1, Number(e.target.value)))} className="input pr-10" /><span className="absolute right-3 top-2 text-sm text-slate-400">명</span></div>
+            </Field>
+            <Field label="평소 전기 사용">
+              <select value={usagePattern} onChange={(e) => setUsagePattern(e.target.value as typeof usagePattern)} className="input">
+                <option value="low">적은 편 · 낮 시간 외출</option>
+                <option value="normal">보통 · 일반 가정</option>
+                <option value="high">많은 편 · 재택/가전 많음</option>
+              </select>
+            </Field>
+            <Field label="패널 설치 공간">
+              <select value={roofCondition} onChange={(e) => setRoofCondition(e.target.value as typeof roofCondition)} className="input">
+                <option value="good">충분함 · 장애물 거의 없음</option>
+                <option value="partial">일부 가능 · 실외기/구조물 있음</option>
+                <option value="limited">협소함 · 사용 가능 공간 적음</option>
+              </select>
+            </Field>
+            <Field label="지붕 방향">
+              <select value={orientation} onChange={(e) => setOrientation(e.target.value as typeof orientation)} className="input">
+                <option value="south">남향 경사지붕</option>
+                <option value="southeast">남동·남서향</option>
+                <option value="east">동·서향</option>
+                <option value="flat">평지붕</option>
+              </select>
+            </Field>
+            <Field label="최근 월 사용량 (선택)" hint="고지서 값이 있으면 추정보다 우선합니다.">
+              <div className="relative"><input type="number" min="0" placeholder={`${estimatedMonthlyKwh}`} value={knownMonthlyKwh} onChange={(e) => setKnownMonthlyKwh(e.target.value)} className="input pr-14" /><span className="absolute right-3 top-2 text-sm text-slate-400">kWh</span></div>
+            </Field>
+            <Field label="기준 지역">
+              <select value={cityIdx} onChange={(e) => setCityIdx(+e.target.value)} className="input" disabled={Boolean(searchedPlace)}>
+                {CITIES.map((c, i) => <option key={c.name} value={i}>{c.name}</option>)}
+              </select>
+            </Field>
+            <Field label="잉여 전력 판매단가">
+              <div className="relative"><input type="number" min="50" max="300" value={sellPerKwh} onChange={(e) => setSellPerKwh(Number(e.target.value))} className="input pr-20" /><span className="absolute right-3 top-2 text-sm text-slate-400">원/kWh</span></div>
+            </Field>
+          </div>
+          <div className="bg-slate-50 p-5 lg:border-l lg:border-slate-100">
+            <div className="text-xs font-bold uppercase tracking-wider text-teal">자동 산정 결과</div>
+            <div className="mt-4 rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+              <div className="text-xs text-slate-400">추천 설치량</div>
+              <div className="mt-1 text-3xl font-black text-ink">{panelCount}장 <span className="text-lg text-amber">· {systemKw}kW</span></div>
+              <div className="mt-2 text-xs text-slate-400">450W 패널 · 패널당 약 2.1㎡ 기준</div>
+            </div>
+            <div className="mt-3 space-y-2 rounded-xl bg-white p-4 text-sm ring-1 ring-slate-200">
+              <Row k={knownMonthlyKwh ? "입력 월 사용량" : "예상 월 사용량"} v={`${monthlyConsumption.toLocaleString()}kWh`} strong />
+              <Row k="예상 연 사용량" v={`${annualConsumption.toLocaleString()}kWh`} />
+              <Row k="설치 가능 면적" v={`약 ${installableArea.toFixed(1)}㎡`} />
+              <Row k="최대 설치 가능" v={`${maxPanels}장`} />
+              <Row k="적용 방향" v={orientationSetting.label} />
+            </div>
+            <div className="mt-3 text-[11px] leading-5 text-slate-400">추천량은 예상 연 사용량의 약 85% 충당을 목표로 하되, 실제 설치 가능 면적을 넘지 않도록 산정합니다.</div>
+          </div>
+        </div>
+      </section>
 
       {/* KPI */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Kpi label="연간 발전량" value={`${r.annualGen.toLocaleString()}kWh`} sub={`${city.name} · ${systemKw}kW`} tone="text-amber" />
-        <Kpi label="RE100 달성률" value={`${r.re100.toFixed(0)}%`} sub={`소비 ${t.consumptionYr.toLocaleString()}kWh 대비`} tone={r.re100 >= 100 ? "text-ok" : "text-ink"} />
+        <Kpi label="예상 연간 발전량" value={`${r.annualGen.toLocaleString()}kWh`} sub={`${searchedPlace ? "검색 위치" : city.name} · ${panelCount}장`} tone="text-amber" />
+        <Kpi label="에너지 자립률" value={`${r.re100.toFixed(0)}%`} sub={`예상 소비 ${annualConsumption.toLocaleString()}kWh 대비`} tone={r.re100 >= 100 ? "text-ok" : "text-ink"} />
         <Kpi label="연 예상 수익" value={won(r.annualRevenue)} sub="자가소비 절감 + 판매수익" tone="text-teal" />
         <Kpi label="손익분기" value={isFinite(r.bepYears) ? `${r.bepYears.toFixed(1)}년` : "—"} sub={`설치비 ${won(r.install)}`} />
       </div>
 
-      {/* 실제 시장가 기준 비용·회수 계산 (사용자 제공 표) */}
-      <section className="card p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-sm font-bold">💰 실제 시장가 기준 설치 비용·회수 계산</div>
-          <label className="flex items-center gap-2 text-xs text-slate-500">
-            보조금 수령
-            <button
-              onClick={() => setSubsidyOn((v) => !v)}
-              className={`relative h-5 w-9 rounded-full transition ${subsidyOn ? "bg-ok" : "bg-slate-300"}`}
-            >
-              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition ${subsidyOn ? "left-4" : "left-0.5"}`} />
-            </button>
-          </label>
-        </div>
-        <div className="mt-1 text-xs text-slate-400">2024 정부지원 기준 · 표 값을 근거로 자부담·회수기간·25년 순이익을 계산합니다.</div>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {COST.map((c) => {
-            const self = subsidyOn ? c.selfWith : c.selfWithout; // 만원
-            const payback = c.saveYear > 0 ? self / c.saveYear : Infinity; // 년
-            const net25 = c.saveYear * 25 - self; // 만원
-            return (
-              <div key={c.name} className="rounded-xl border border-slate-200 p-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{c.emoji}</span>
-                  <div>
-                    <div className="font-bold">{c.name} <span className="text-xs font-normal text-slate-400">· {c.spec}</span></div>
-                    <div className="text-xs text-slate-400">{c.fit}</div>
-                  </div>
-                </div>
-                <div className="mt-3 space-y-1.5 text-sm">
-                  <Row k="총 설치비" v={c.install} />
-                  <Row k="보조금" v={c.subsidy} />
-                  <Row k={`자부담 (${subsidyOn ? "보조금 수령" : "미수령"})`} v={`약 ${self}만원`} strong />
-                  <Row k="월 발전량" v={c.genMonth} />
-                  <Row k="연 절감액" v={`약 ${c.saveYear}만원`} />
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <div className="rounded-lg bg-amber-soft p-3 text-center">
-                    <div className="text-xs text-slate-500">투자 회수기간</div>
-                    <div className="text-lg font-extrabold text-amber">{isFinite(payback) ? `${payback.toFixed(1)}년` : "—"}</div>
-                  </div>
-                  <div className="rounded-lg bg-ok-soft p-3 text-center">
-                    <div className="text-xs text-slate-500">25년 누적 순이익</div>
-                    <div className="text-lg font-extrabold text-ok">{net25.toLocaleString()}만원</div>
-                  </div>
-                </div>
+      <section className="card overflow-hidden">
+        <div className="grid lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="bg-ink p-6 text-white md:p-7">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-[0.16em] text-amber">Recommended Plan</div>
+                <h2 className="mt-2 text-2xl font-black">우리 집 추천 견적</h2>
               </div>
-            );
-          })}
-        </div>
-        <div className="mt-2 text-[11px] text-slate-400">
-          ※ 회수기간 = 자부담 ÷ 연 절감액 · 25년 순이익 = 연 절감액×25 − 자부담. 보조금·자부담은 지자체 지원 규모에 따라 범위 내에서 달라집니다.
+              <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold">예상 견적</span>
+            </div>
+            <div className="mt-7 flex items-end gap-3">
+              <div className="text-4xl font-black tracking-tight">{won(selfPay)}</div>
+              <div className="pb-1 text-sm text-white/50">예상 자부담</div>
+            </div>
+            <div className="mt-6 grid grid-cols-3 gap-2">
+              <QuoteStat label="설치 용량" value={`${systemKw}kW`} />
+              <QuoteStat label="패널 구성" value={`450W × ${panelCount}`} />
+              <QuoteStat label="회수 예상" value={`${r.bepYears.toFixed(1)}년`} />
+            </div>
+            <div className="mt-6 flex items-center justify-between rounded-xl bg-white/[0.07] px-4 py-3">
+              <div>
+                <div className="text-sm font-semibold">지자체 보조금 반영</div>
+                <div className="mt-0.5 text-xs text-white/45">거주 지역과 공고 시점에 따라 달라질 수 있어요.</div>
+              </div>
+              <button type="button" aria-label="보조금 반영 여부" aria-pressed={subsidyOn} onClick={() => setSubsidyOn((v) => !v)} className={`relative h-6 w-11 rounded-full transition ${subsidyOn ? "bg-ok" : "bg-white/20"}`}>
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${subsidyOn ? "left-[22px]" : "left-0.5"}`} />
+              </button>
+            </div>
+          </div>
+          <div className="p-6 md:p-7">
+            <div className="flex items-center justify-between">
+              <div className="font-bold">예상 비용 내역</div>
+              <div className="text-xs text-slate-400">VAT 포함</div>
+            </div>
+            <div className="mt-5 space-y-3 text-sm">
+              <Row k={`고효율 450W 패널 × ${panelCount}장`} v={won(panelEquipmentCost)} />
+              <Row k="인버터·전기 설비" v={won(inverterCost)} />
+              <Row k="구조물·고정 자재" v={won(structureCost)} />
+              <Row k="설치·전기 공사" v={won(installationCost)} />
+              <div className="border-t border-dashed border-slate-200 pt-3"><Row k="설치비 합계" v={won(grossInstallCost)} strong /></div>
+              <Row k="예상 보조금" v={estimatedSubsidy ? `− ${won(estimatedSubsidy)}` : "미반영"} />
+            </div>
+            <div className="mt-5 flex items-center justify-between rounded-xl bg-amber-soft px-4 py-4">
+              <span className="text-sm font-bold text-slate-700">최종 예상 자부담</span>
+              <span className="text-xl font-black text-amber">{won(selfPay)}</span>
+            </div>
+            <p className="mt-3 text-[11px] leading-5 text-slate-400">현장 실측 전 간이 견적입니다. 분전반 증설, 크레인 사용, 방수·보강 공사는 실제 견적에서 추가될 수 있습니다.</p>
+          </div>
         </div>
       </section>
 
-      {/* 입력 */}
-      <div className="card grid gap-5 p-5 md:grid-cols-2 lg:grid-cols-3">
-        <div>
-          <div className="label">설치 지역</div>
-          <select value={cityIdx} onChange={(e) => setCityIdx(+e.target.value)} className="input">
-            {CITIES.map((c, i) => (
-              <option key={c.name} value={i}>{c.name} (위도 {c.lat}°)</option>
-            ))}
-          </select>
-        </div>
-        <Slider label={`시스템 용량 · ${systemKw}kW`} min={1} max={target === "가정" ? 10 : 300} v={systemKw} on={setSystemKw} />
-        <Slider label={`설치 경사각 · ${tilt}°`} min={0} max={60} v={tilt} on={setTilt} />
-        <Slider label={`방위 · ${azimuth === 0 ? "정남" : azimuth < 0 ? `동${-azimuth}°` : `서${azimuth}°`}`} min={-90} max={90} v={azimuth} on={setAzimuth} />
-        <Slider label={`자가소비율 · ${(selfRate * 100).toFixed(0)}%`} min={0} max={100} v={Math.round(selfRate * 100)} on={(v) => setSelfRate(v / 100)} />
-        <Slider label={`전력 판매단가 · ${sellPerKwh}원/kWh`} min={50} max={300} v={sellPerKwh} on={setSellPerKwh} />
-      </div>
-
-      {/* 월별 발전량 + RE100 게이지 */}
+      {/* 월별 발전량 + 에너지 자립률 게이지 */}
       <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
         <div className="card p-5">
-          <div className="text-sm font-bold">월별 발전량 · {city.name} (위치 기반)</div>
-          <div className="mt-1 text-xs text-slate-400">위도·경사·방위에 따라 계절별 일사량이 반영됩니다 (여름↑·겨울↓)</div>
+          <div className="flex items-start justify-between gap-3"><div><div className="text-sm font-bold">월별 에너지 예상</div><div className="mt-1 text-xs text-slate-400">우리 집 소비량과 태양광 발전량을 월별로 비교합니다.</div></div><div className="flex gap-3 text-[11px]"><span className="text-amber">● 발전</span><span className="text-teal">━ 소비</span></div></div>
           <div className="mt-4 h-64">
             <ResponsiveContainer>
-              <ComposedChart data={r.monthly} margin={{ left: -8, right: 8 }}>
+              <ComposedChart data={monthlyEnergy} margin={{ left: -8, right: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" />
                 <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#94a3b8" }} />
                 <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} width={44} />
-                <Tooltip formatter={(v: number, n) => (n === "발전량" ? [`${v}kWh`, "발전량"] : [`${v}kWh/m²`, "일사량"])} />
+                <Tooltip formatter={(v: number, n) => [`${v.toLocaleString()}kWh`, n]} />
                 <Bar dataKey="gen" name="발전량" radius={[5, 5, 0, 0]} fill={AMBER} />
-                <Line dataKey="ghi" name="일사량" stroke={TEAL} strokeWidth={2} dot={false} />
+                <Line dataKey="consumption" name="사용량" stroke={TEAL} strokeWidth={2.5} dot={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>
         <div className="card flex flex-col items-center justify-center p-5">
-          <div className="text-sm font-bold self-start">RE100 달성률</div>
+          <div className="text-sm font-bold self-start">에너지 자립률</div>
           <div className="relative h-48 w-48">
             <ResponsiveContainer>
               <RadialBarChart innerRadius="72%" outerRadius="100%" data={[{ v: r.re100 }]} startAngle={90} endAngle={-270}>
@@ -231,20 +347,20 @@ export default function SolarPage() {
             </ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <div className="text-3xl font-extrabold">{r.re100.toFixed(0)}%</div>
-              <div className="text-xs text-slate-400">RE100</div>
+              <div className="text-xs text-slate-400">연간 소비 대비</div>
             </div>
           </div>
           <div className="mt-2 text-center text-xs text-slate-500">
-            연 발전 {r.annualGen.toLocaleString()}kWh / 소비 {t.consumptionYr.toLocaleString()}kWh
+            연 발전 {r.annualGen.toLocaleString()}kWh / 예상 소비 {annualConsumption.toLocaleString()}kWh
           </div>
         </div>
       </div>
 
-      {/* 손익분기 + 도시 비교 */}
+      {/* 투자 회수 + 에너지 흐름 */}
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="card p-5">
-          <div className="text-sm font-bold">누적 수익 vs 설치비 (손익분기)</div>
-          <div className="mt-1 text-xs text-slate-400">유럽식 전력거래(잉여 판매) 가정 · 연 0.4% 열화 반영</div>
+          <div className="text-sm font-bold">투자비 회수 전망</div>
+          <div className="mt-1 text-xs text-slate-400">자가소비 절감과 잉여 전력 판매 수익 · 연 0.4% 성능 저하 반영</div>
           <div className="mt-4 h-64">
             <ResponsiveContainer>
               <LineChart data={r.cumulative} margin={{ left: 8, right: 12 }}>
@@ -252,7 +368,7 @@ export default function SolarPage() {
                 <XAxis dataKey="year" tick={{ fontSize: 10, fill: "#94a3b8" }} unit="년" />
                 <YAxis tick={{ fontSize: 9, fill: "#94a3b8" }} width={52} tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} />
                 <Tooltip formatter={(v: number) => won(v)} labelFormatter={(y) => `${y}년차`} />
-                <ReferenceLine y={r.install} stroke="#94a3b8" strokeDasharray="4 4" label={{ value: "설치비", fontSize: 10, fill: "#94a3b8" }} />
+                <ReferenceLine y={selfPay} stroke="#94a3b8" strokeDasharray="4 4" label={{ value: "자부담", fontSize: 10, fill: "#94a3b8" }} />
                 {isFinite(r.bepYears) && <ReferenceLine x={Math.round(r.bepYears)} stroke={AMBER} strokeDasharray="4 4" label={{ value: "BEP", fontSize: 10, fill: AMBER }} />}
                 <Line dataKey="revenue" name="누적 수익" stroke={OK} strokeWidth={2.5} dot={false} />
               </LineChart>
@@ -260,49 +376,34 @@ export default function SolarPage() {
           </div>
         </div>
         <div className="card p-5">
-          <div className="text-sm font-bold">도시별 연 발전량 비교 (동일 시스템)</div>
-          <div className="mt-1 text-xs text-slate-400">같은 {systemKw}kW·경사 {tilt}°라도 위치(위도·기후)에 따라 발전량이 달라져요</div>
-          <div className="mt-4 h-64">
-            <ResponsiveContainer>
-              <BarChart data={cc} margin={{ left: -8, right: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#475569" }} />
-                <YAxis tick={{ fontSize: 9, fill: "#94a3b8" }} width={44} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(v: number) => `${v.toLocaleString()}kWh`} />
-                <Bar dataKey="gen" radius={[5, 5, 0, 0]}>
-                  {cc.map((c) => (
-                    <Cell key={c.name} fill={c.name === city.name ? AMBER : "#cbd5e1"} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="text-sm font-bold">연간 에너지 흐름</div>
+          <div className="mt-1 text-xs text-slate-400">발전한 전기가 어디에 사용되고, 어떤 경제 효과를 만드는지 보여줍니다.</div>
+          <div className="mt-6 space-y-5">
+            <EnergyFlow label="집에서 바로 사용" value={r.selfUsed} total={annualConsumption} color="bg-teal" note={`${won(selfSaving)} 절감`} />
+            <EnergyFlow label="잉여 전력 판매" value={r.surplus} total={annualConsumption} color="bg-amber" note={`${won(saleRevenue)} 수익`} />
+            <EnergyFlow label="전력망에서 구매" value={gridUse} total={annualConsumption} color="bg-slate-300" note="발전 부족분" />
+          </div>
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <Mini label="연간 경제 효과" value={won(r.annualRevenue)} sub="절감액 + 판매수익" tone="text-teal" />
+            <Mini label="25년 예상 순이익" value={won(net25)} sub="성능 저하·자부담 반영" tone={net25 >= 0 ? "text-ok" : "text-slate-500"} />
           </div>
         </div>
       </div>
 
-      {/* 건물별 일조량 지도 */}
-      <section className="card p-5">
-        <div className="text-sm font-bold">🗺️ 건물별 일조량·발전 잠재량 지도 (서울 실제 건물)</div>
-        <div className="mt-1 text-xs text-slate-400">
-          OSM 실제 건물에 옥상 면적 × 위치별 연 일사량(pvlib 방법론)을 적용해 건물별 발전 잠재량을 색으로 표시합니다. 건물에 마우스를 올리면 상세, 드래그·휠로 회전·줌.
-        </div>
-        <div className="mt-3">
-          <BuildingSolarMap />
-        </div>
-        <div className="mt-2 text-[11px] text-slate-400">
-          ※ 위도·경사 기반 모델 추정치입니다. 주변 건물 그림자(차폐)·옥상 구조물까지 반영한 정밀 산출은 LiDAR/DSM + pvlib 파이프라인이 필요합니다.
-        </div>
-      </section>
+      {!searchedPlace && mapSection}
 
-      {/* 수익 구성 */}
-      <div className="card p-5">
-        <div className="text-sm font-bold">연간 수익 구성</div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <Mini label="자가소비 절감" value={won(r.selfUsed * inp.savePerKwh)} sub={`${r.selfUsed.toFixed(0)}kWh × ${inp.savePerKwh}원`} />
-          <Mini label="잉여 판매수익" value={won(r.surplus * sellPerKwh)} sub={`${r.surplus.toFixed(0)}kWh × ${sellPerKwh}원`} />
-          <Mini label="연 합계" value={won(r.annualRevenue)} sub={`설치비 ${won(r.install)} 회수 ${isFinite(r.bepYears) ? r.bepYears.toFixed(1) : "—"}년`} tone="text-amber" />
+      <section className="card p-5 md:p-6">
+        <div className="flex flex-wrap items-end justify-between gap-3"><div><div className="text-sm font-bold">설치 전 확인사항</div><div className="mt-1 text-xs text-slate-400">실제 신청 전 아래 항목을 확인하면 정확한 견적을 받을 수 있습니다.</div></div><span className="badge bg-teal-soft text-teal">현장 실측 필요</span></div>
+        <div className="mt-5 grid gap-3 md:grid-cols-4">
+          {[
+            ["01", "전기 고지서", "최근 12개월 사용량으로 권장 용량을 보정합니다."],
+            ["02", "옥상·베란다 실측", "음영, 방수 상태와 구조물 설치 공간을 확인합니다."],
+            ["03", "보조금 공고", "지자체 접수 기간과 지원 잔여 예산을 확인합니다."],
+            ["04", "계통 연결", "한전 연계 가능 여부와 분전반 상태를 점검합니다."],
+          ].map(([number, title, body]) => <div key={number} className="rounded-xl border border-slate-200 p-4"><div className="text-xs font-black text-amber">STEP {number}</div><div className="mt-2 text-sm font-bold">{title}</div><p className="mt-1 text-xs leading-5 text-slate-500">{body}</p></div>)}
         </div>
-      </div>
+        <div className="mt-5 flex flex-col items-start justify-between gap-3 rounded-xl bg-slate-50 px-4 py-4 sm:flex-row sm:items-center"><div><div className="text-sm font-bold">현재 결과를 상담용으로 활용하세요</div><div className="mt-1 text-xs text-slate-400">추천 {systemKw}kW · 예상 자부담 {won(selfPay)} · 연간 경제 효과 {won(r.annualRevenue)}</div></div><button type="button" onClick={() => window.print()} className="btn-primary shrink-0">결과 인쇄하기</button></div>
+      </section>
     </div>
   );
 }
@@ -313,6 +414,26 @@ function Kpi({ label, value, sub, tone = "text-ink" }: { label: string; value: s
       <div className="text-xs font-semibold text-slate-500">{label}</div>
       <div className={`mt-1 text-2xl font-extrabold ${tone}`}>{value}</div>
       {sub && <div className="mt-1 text-xs text-slate-400">{sub}</div>}
+    </div>
+  );
+}
+function QuoteStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-white/[0.07] p-3">
+      <div className="text-[10px] text-white/45">{label}</div>
+      <div className="mt-1 text-sm font-bold text-white">{value}</div>
+    </div>
+  );
+}
+function EnergyFlow({ label, value, total, color, note }: { label: string; value: number; total: number; color: string; note: string }) {
+  const percentage = Math.min(100, Math.max(2, value / total * 100));
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between text-xs">
+        <span className="font-semibold text-slate-600">{label}</span>
+        <span className="text-slate-400">{Math.round(value).toLocaleString()}kWh · {note}</span>
+      </div>
+      <div className="h-2.5 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${color}`} style={{ width: `${percentage}%` }} /></div>
     </div>
   );
 }
@@ -333,11 +454,12 @@ function Row({ k, v, strong = false }: { k: string; v: string; strong?: boolean 
     </div>
   );
 }
-function Slider({ label, min, max, v, on }: { label: string; min: number; max: number; v: number; on: (v: number) => void }) {
+function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <div>
       <div className="label">{label}</div>
-      <input type="range" min={min} max={max} value={v} onChange={(e) => on(+e.target.value)} className="w-full accent-ink" />
+      {children}
+      {hint && <div className="mt-1 text-[10px] leading-4 text-slate-400">{hint}</div>}
     </div>
   );
 }

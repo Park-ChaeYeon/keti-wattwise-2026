@@ -1,325 +1,232 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { bill, tierOf, won } from "@/lib/domain";
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  ComposedChart,
-  Area,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  Cell,
-} from "recharts";
-import { HOUSEHOLDS, allCalc, calc, houseAnswer, homeSolar, type HouseholdCalc } from "@/lib/households";
-import { anomaly, won } from "@/lib/domain";
-import dynamic from "next/dynamic";
-
-const BuildingSolarMap = dynamic(() => import("@/components/BuildingSolarMap"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-[380px] items-center justify-center rounded-xl bg-slate-100 text-sm text-slate-400">지도 로딩…</div>
-  ),
-});
+  CATALOG,
+  INITIAL_SETTINGS,
+  SCENARIOS,
+  SCENARIO_COPY,
+  calculateHouseholdUsage,
+  type ApplianceSetting,
+  type DemoResult,
+  type ForecastPoint,
+  type HouseholdMeta,
+  type Occupancy,
+  type Sensitivity,
+} from "@/features/households/model";
 
 const AMBER = "#E39A00";
 const TEAL = "#0A9AA8";
-const DANGER = "#D8432B";
-
-type Msg = { role: "user" | "bot"; text: string };
-const has = (q: string, ...k: string[]) => k.some((x) => q.includes(x));
 
 export default function HouseholdsPage() {
-  const cards = useMemo(() => allCalc(), []);
-  const [sel, setSel] = useState<string | null>(null);
-  const c = sel ? calc(HOUSEHOLDS.find((h) => h.id === sel)!) : null;
+  const [mode, setMode] = useState<"demo" | "direct">("demo");
+  const [homeType, setHomeType] = useState("아파트");
+  const [residents, setResidents] = useState(2);
+  const [occupancy, setOccupancy] = useState<Occupancy>("normal");
+  const [sensitivity, setSensitivity] = useState<Sensitivity>("normal");
+  const [settings, setSettings] = useState(INITIAL_SETTINGS);
+  const [demoState, setDemoState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [demoError, setDemoError] = useState("");
+  const [demo, setDemo] = useState<DemoResult | null>(null);
+
+  const result = useMemo(
+    () => calculateHouseholdUsage(settings, residents, occupancy, sensitivity),
+    [occupancy, residents, sensitivity, settings],
+  );
+
+  const riskTone = result.score >= 70 ? "text-danger" : result.score >= 35 ? "text-amber" : "text-teal";
+  const status = result.score >= 70 ? "확인 필요" : result.score >= 35 ? "주의 관찰" : "정상 범위";
+  const sensitivityLabel = sensitivity === "sensitive" ? "민감하게" : sensitivity === "relaxed" ? "낮게" : "보통";
+
+  function update(id: string, patch: Partial<ApplianceSetting>) {
+    setSettings((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
+  }
+
+  const loadDemo = useCallback(async () => {
+    setDemoState("loading");
+    setDemoError("");
+    try {
+      const listResponse = await fetch("/api/household-forecast");
+      const listData = await listResponse.json() as { houses?: HouseholdMeta[]; error?: string };
+      if (!listResponse.ok || !listData.houses?.length) throw new Error(listData.error ?? "진단할 가구 데이터를 찾지 못했습니다.");
+      const stored = sessionStorage.getItem("wattwise-demo");
+      const saved = stored ? JSON.parse(stored) as { houseId?: string; scenario?: string } : null;
+      const available = listData.houses.filter((house) => /^(H\d{3}|house_\d+)$/.test(house.id));
+      const house = available.find((item) => item.id === saved?.houseId) ?? available[Math.floor(Math.random() * available.length)];
+      const scenario = SCENARIOS.includes(saved?.scenario as typeof SCENARIOS[number]) ? saved!.scenario! : SCENARIOS[Math.floor(Math.random() * SCENARIOS.length)];
+      sessionStorage.setItem("wattwise-demo", JSON.stringify({ houseId: house.id, scenario }));
+      const [forecastResponse, anomalyResponse] = await Promise.all([
+        fetch("/api/household-forecast", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ houseId: house.id }) }),
+        fetch("/api/anomaly", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scenario }) }),
+      ]);
+      const forecastData = await forecastResponse.json() as { forecast?: ForecastPoint[]; error?: string };
+      const anomalyData = await anomalyResponse.json() as DemoResult["anomaly"] & { error?: string };
+      if (!forecastResponse.ok || !forecastData.forecast?.length) throw new Error(forecastData.error ?? "예측 결과를 만들지 못했습니다.");
+      if (!anomalyResponse.ok || anomalyData.error) throw new Error(anomalyData.error ?? "이상탐지 결과를 만들지 못했습니다.");
+      const forecast = forecastData.forecast.map((point, index) => {
+        const rawExpected = point["0.5"] ?? point.prediction_kwh ?? 0;
+        const date = point.timestamp ? new Date(point.timestamp) : null;
+        const low = point["0.1"] ?? rawExpected * 0.8;
+        const high = point["0.9"] ?? rawExpected * 1.2;
+        return { hour: date && !Number.isNaN(date.getTime()) ? `${date.getHours()}시` : `${index}시`, low, expected: rawExpected, high, range: Math.max(0, high - low) };
+      });
+      const daily = forecast.reduce((sum, point) => sum + point.expected, 0);
+      setDemo({ house, forecast, monthly: daily * 30, anomaly: anomalyData });
+      setDemoState("done");
+    } catch (error) {
+      setDemoState("error");
+      setDemoError(error instanceof Error ? error.message : "자동 진단에 실패했습니다.");
+    }
+  }, []);
+
+  useEffect(() => { void loadDemo(); }, [loadDemo]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="section-title">🏠 스마트홈 진단</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          가정을 선택하면 가전별 사용량을 뜯어보고, 통합 전력량·요금과 절약 포인트를 챗봇에게 물어볼 수 있어요. 모든 수치는 정격전력×사용시간 기반 추정입니다.
-        </p>
+      <section className="relative overflow-hidden rounded-[2rem] bg-[#11181c] px-7 py-9 text-white shadow-pop md:px-10 md:py-11">
+        <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-danger/15 blur-3xl" />
+        <div className="absolute -bottom-28 left-1/3 h-64 w-64 rounded-full bg-teal/15 blur-3xl" />
+        <div className="relative grid items-center gap-8 lg:grid-cols-[1fr_0.42fr]">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[#ff9d8e]"><span className="h-2 w-2 rounded-full bg-danger" />Smart home safety</div>
+            <h1 className="mt-5 break-keep text-3xl font-black leading-tight tracking-[-0.035em] md:text-5xl">평소와 다른 전력 사용을<br /><span className="text-[#ff9d8e]">먼저 발견합니다.</span></h1>
+            <p className="mt-5 max-w-2xl break-keep text-sm leading-7 text-white/60">오늘의 전력 흐름을 평소 생활 패턴과 비교해 장시간 활동이 없거나 갑자기 사용량이 달라진 순간을 찾고, 확인이 필요한 신호를 알려드립니다.</p>
+            <Link href="/analytics" className="mt-7 inline-flex rounded-full border border-white/20 px-4 py-2 text-xs font-bold text-white/75 transition hover:bg-white/10 hover:text-white">전력 사용량 예측 보기 ↗</Link>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-5 backdrop-blur">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-danger/20 text-xl text-[#ff9d8e]">⌁</div>
+            <div className="mt-5 text-sm font-black">생활 신호를 놓치지 않도록</div>
+            <p className="mt-2 break-keep text-xs leading-6 text-white/45">변화가 감지되면 상태와 원인, 확인할 행동을 한눈에 안내합니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 p-1.5">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <button type="button" onClick={() => setMode("demo")} className={`rounded-xl p-4 text-left transition ${mode === "demo" ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:bg-white/60"}`}>
+            <div className={`text-[10px] font-black tracking-[0.12em] ${mode === "demo" ? "text-danger" : "text-slate-400"}`}>RECOMMENDED</div><div className="mt-1 font-extrabold">이상 신호 자동 점검</div><div className="mt-1 text-xs text-slate-500">최근 전력 패턴에서 평소와 다른 신호를 즉시 확인</div>
+          </button>
+          <button type="button" onClick={() => setMode("direct")} className={`rounded-xl p-4 text-left transition ${mode === "direct" ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:bg-white/60"}`}>
+            <div className={`text-[10px] font-black tracking-[0.12em] ${mode === "direct" ? "text-amber" : "text-slate-400"}`}>CUSTOM</div><div className="mt-1 font-extrabold">내 가전 직접 점검</div><div className="mt-1 text-xs text-slate-500">평소와 오늘의 사용시간을 비교해 이상 여부 확인</div>
+          </button>
+        </div>
+      </section>
+
+      {mode === "demo" ? (
+        <>
+          <section className="card border-l-4 border-l-danger p-6 md:p-7">
+            <div className="flex items-start gap-4"><div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-danger-soft text-lg text-danger">!</div><div><div className="flex items-center gap-2 text-xs font-bold text-danger"><span className="h-1.5 w-1.5 rounded-full bg-danger" />전력 이상 점검</div><h2 className="mt-1.5 text-xl font-black">확인이 필요한 이상 신호를 점검합니다</h2><p className="mt-2 max-w-2xl break-keep text-sm leading-6 text-slate-500">최근 전력 신호를 우리 집의 평소 기준선과 비교해 이상 징후를 찾고, 발견된 신호에 맞는 확인 방법을 안내합니다.</p></div></div>
+          </section>
+
+          {demoState === "error" && <div className="rounded-xl bg-danger-soft p-5 text-sm text-danger">{demoError}<button type="button" className="ml-3 underline" onClick={() => void loadDemo()}>다시 시도</button></div>}
+          {demoState === "loading" && !demo && <div className="card flex min-h-[360px] flex-col items-center justify-center"><span className="h-8 w-8 animate-spin rounded-full border-4 border-danger/20 border-t-danger" /><div className="mt-4 font-bold">이상 신호를 점검하고 있습니다</div><p className="mt-1 text-xs text-slate-400">최근 전력 패턴을 평소 기준선과 비교합니다.</p></div>}
+          {demo && <>
+            <div className="grid gap-4 md:grid-cols-4">
+              <Kpi label="현재 진단 상태" value={demo.anomaly.isAnomaly ? "확인 필요" : "정상 범위"} tone={demo.anomaly.isAnomaly ? "text-danger" : "text-teal"} sub={demo.anomaly.isAnomaly ? "평소와 다른 신호 감지" : "평소 사용 범위 유지"} />
+              <Kpi label="기준선 편차" value={`${Math.min(999, Math.round(demo.anomaly.score / Math.max(0.001, demo.anomaly.threshold) * 100))}%`} tone={demo.anomaly.isAnomaly ? "text-danger" : "text-teal"} sub="100% 이상이면 확인 필요" />
+              <Kpi label="탐지 결과" value={SCENARIO_COPY[demo.anomaly.scenario]?.title ?? "전력 패턴 점검"} sub="AI가 감지한 주요 신호" />
+              <Kpi label="판단 기준" value={demo.anomaly.threshold.toFixed(2)} sub={`현재 모델 점수 ${demo.anomaly.score.toFixed(2)}`} />
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+              <AnomalyCard anomaly={demo.anomaly} />
+              <section className="card p-5"><div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-sm font-bold">참고 · 다음 24시간 사용량</div><div className="mt-1 text-xs text-slate-400">이상 신호 판단을 돕는 보조 예측 정보입니다</div></div><div className="flex items-center gap-3 text-[10px] text-slate-400"><span><i className="mr-1 inline-block h-0.5 w-4 bg-teal align-middle" />중앙 예측</span><span><i className="mr-1 inline-block h-2 w-4 bg-teal/15 align-middle" />10–90% 범위</span></div></div><div className="mt-4 h-72"><ResponsiveContainer><ComposedChart data={demo.forecast} margin={{ left: -8, right: 8 }}><CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" vertical={false} /><XAxis dataKey="hour" interval={2} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} /><YAxis width={42} tick={{ fontSize: 10, fill: "#94a3b8" }} unit="k" axisLine={false} tickLine={false} /><Tooltip formatter={(v: number, name: string) => [`${v.toFixed(2)}kWh`, name === "expected" ? "중앙 예측" : name === "range" ? "예측 구간 폭" : "하한"]} /><Area dataKey="low" stackId="interval" stroke="none" fill="transparent" isAnimationActive={false} /><Area dataKey="range" stackId="interval" stroke="none" fill={TEAL} fillOpacity={0.13} isAnimationActive={false} /><Line dataKey="expected" stroke={TEAL} strokeWidth={2.5} dot={false} isAnimationActive={false} /></ComposedChart></ResponsiveContainer></div><div className="mt-2 flex justify-between border-t border-slate-100 pt-3 text-xs text-slate-400"><span>{demo.house.type} · {demo.house.area}</span><span>{demo.house.rows.toLocaleString()}시간 데이터</span></div></section>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Kpi label="참고 · 내일 예상 사용량" value={`${(demo.monthly / 30).toFixed(1)}kWh`} sub="향후 24시간 중앙 예측" />
+              <Kpi label="참고 · 월 예상 사용량" value={`${Math.round(demo.monthly)}kWh`} sub="24시간 예측 × 30일" />
+              <Kpi label="참고 · 예상 전기요금" value={won(bill(demo.monthly).total)} tone="text-amber" sub={`${tierOf(demo.monthly)}구간 요금`} />
+            </div>
+          </>}
+        </>
+      ) : (
+        <>
+
+      <section className="card overflow-hidden">
+        <div className="border-b border-slate-100 px-5 py-4"><div className="text-sm font-bold">1. 우리 집 기본 조건</div><div className="mt-1 text-xs text-slate-400">가구 조건은 기본 부하와 시간대별 사용 패턴에 반영됩니다.</div></div>
+        <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+          <label><span className="label">주거 형태</span><select className="input" value={homeType} onChange={(e) => setHomeType(e.target.value)}><option>아파트</option><option>빌라·다세대</option><option>단독주택</option><option>오피스텔·원룸</option></select></label>
+          <label><span className="label">거주 인원</span><div className="relative"><input className="input pr-9" type="number" min="1" max="10" value={residents} onChange={(e) => setResidents(Math.max(1, +e.target.value))} /><span className="absolute right-3 top-2 text-sm text-slate-400">명</span></div></label>
+          <label><span className="label">평소 재실 패턴</span><select className="input" value={occupancy} onChange={(e) => setOccupancy(e.target.value as typeof occupancy)}><option value="away">낮 시간 외출</option><option value="normal">출퇴근·일반</option><option value="home">재택·종일 재실</option></select></label>
+          <label><span className="label">이상 감지 민감도</span><select className="input" value={sensitivity} onChange={(e) => setSensitivity(e.target.value as typeof sensitivity)}><option value="relaxed">낮게</option><option value="normal">보통</option><option value="sensitive">민감하게</option></select></label>
+        </div>
+      </section>
+
+      <section className="card overflow-hidden">
+        <div className="border-b border-slate-100 px-5 py-4"><div className="text-sm font-bold">2. 가전과 사용시간 선택</div><div className="mt-1 text-xs text-slate-400">평소 시간은 예측 기준, 오늘 시간은 이상탐지 관측값으로 사용합니다.</div></div>
+        <div className="grid gap-px bg-slate-100 sm:grid-cols-2 lg:grid-cols-3">
+          {CATALOG.map((item) => {
+            const setting = settings[item.id];
+            return <div key={item.id} className={`bg-white p-4 transition ${setting.enabled ? "" : "opacity-55"}`}>
+              <div className="flex items-center justify-between"><label className="flex cursor-pointer items-center gap-2 font-semibold"><input type="checkbox" checked={setting.enabled} onChange={(e) => update(item.id, { enabled: e.target.checked })} className="h-4 w-4 accent-ink" /><span>{item.icon} {item.name}</span></label><span className="text-xs text-slate-400">{item.watt.toLocaleString()}W</span></div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <label><span className="text-[10px] font-semibold text-slate-400">평소 하루</span><div className="relative mt-1"><input className="input !py-1.5 pr-7" type="number" min="0" max="24" step="0.5" disabled={!setting.enabled} value={setting.hours} onChange={(e) => update(item.id, { hours: Math.min(24, Math.max(0, +e.target.value)) })} /><span className="absolute right-2 top-1.5 text-xs text-slate-400">h</span></div></label>
+                <label><span className="text-[10px] font-semibold text-teal">오늘 관측</span><div className="relative mt-1"><input className="input !py-1.5 pr-7 focus:border-teal focus:ring-teal/10" type="number" min="0" max="24" step="0.5" disabled={!setting.enabled} value={setting.todayHours} onChange={(e) => update(item.id, { todayHours: Math.min(24, Math.max(0, +e.target.value)) })} /><span className="absolute right-2 top-1.5 text-xs text-slate-400">h</span></div></label>
+              </div>
+            </div>;
+          })}
+        </div>
+      </section>
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <Kpi label="현재 진단 상태" value={status} tone={riskTone} sub={result.unusual.length ? "확인이 필요한 가전이 있습니다" : "평소 사용 범위입니다"} />
+        <Kpi label="편차 점수" value={`${result.score}/100`} tone={riskTone} sub={`판단 기준 ${(result.threshold * 100).toFixed(0)}%`} />
+        <Kpi label="확인 필요 가전" value={`${result.unusual.length}개`} tone={result.unusual.length ? "text-danger" : "text-teal"} sub={`전체 선택 가전 ${result.selected.length}개`} />
+        <Kpi label="감지 민감도" value={sensitivityLabel} sub="설정한 이상 판단 수준" />
       </div>
 
-      {!c ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {cards.map((cc) => (
-            <button
-              key={cc.hh.id}
-              onClick={() => setSel(cc.hh.id)}
-              className={`card p-5 text-left transition hover:shadow-pop ${cc.hh.elderly ? "ring-2 ring-danger/30" : ""}`}
-            >
-              <div className="flex items-start justify-between">
-                <div className="text-3xl">{cc.hh.emoji}</div>
-                {cc.hh.elderly && <span className="badge bg-danger-soft text-danger">🛟 관심 필요</span>}
-              </div>
-              <div className="mt-3 font-bold">{cc.hh.name}</div>
-              <div className="text-xs text-slate-400">{cc.hh.persons}</div>
-              <p className="mt-2 line-clamp-2 text-xs text-slate-500">{cc.hh.note}</p>
-              <div className="mt-4 flex items-end justify-between">
-                <div>
-                  <div className="text-2xl font-extrabold">{cc.monthly.toFixed(0)}<span className="text-sm">kWh</span></div>
-                  <div className="text-xs text-slate-400">월 예상 · {won(cc.billTotal)}</div>
-                </div>
-                <span className={`badge ${cc.tier === 3 ? "bg-danger-soft text-danger" : "bg-slate-100 text-slate-500"}`}>{cc.tier}구간</span>
-              </div>
-            </button>
-          ))}
+      <div className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
+        <section className="card p-5">
+          <div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-sm font-bold">평소 패턴과 오늘 사용 비교</div><div className="mt-1 text-xs text-slate-400">예상 범위를 벗어난 시간대와 사용 변화를 확인합니다</div></div><div className="flex gap-3 text-[11px]"><span className="text-teal">━ 오늘 관측</span><span className="text-amber">━ 평소 예상</span></div></div>
+          <div className="mt-4 h-72"><ResponsiveContainer><ComposedChart data={result.hourly} margin={{ left: -8, right: 8 }}><CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" /><XAxis dataKey="hour" interval={2} tick={{ fontSize: 10, fill: "#94a3b8" }} /><YAxis width={42} tick={{ fontSize: 10, fill: "#94a3b8" }} unit="k" /><Tooltip formatter={(v: number, name) => [`${v.toFixed(2)}kWh`, name]} /><Area dataKey="high" stroke="none" fill={AMBER} fillOpacity={0.1} /><Area dataKey="low" stroke="none" fill="white" /><Line dataKey="expected" name="평소 예상" stroke={AMBER} strokeWidth={2.5} dot={false} /><Line dataKey="observed" name="오늘 관측" stroke={TEAL} strokeWidth={2} dot={false} /></ComposedChart></ResponsiveContainer></div>
+        </section>
+        <section className="card p-5">
+          <div className="text-sm font-bold">이상 신호 및 권장 조치</div>
+          <div className={`mt-4 text-3xl font-black ${riskTone}`}>{status}</div>
+          <div className="mt-1 text-xs text-slate-400">민감도 기준 편차 {(result.threshold * 100).toFixed(0)}% 초과 감지</div>
+          <div className="mt-5 space-y-2">
+            {result.unusual.length ? result.unusual.slice(0, 4).map((item) => <div key={item.id} className="rounded-lg bg-danger-soft p-3"><div className="flex items-center justify-between text-sm"><b>{item.icon} {item.name}</b><span className="font-bold text-danger">{item.deviation > 1 ? "+100%" : `${Math.round(item.deviation * 100)}%`} 편차</span></div><div className="mt-1 text-xs text-slate-500">평소 {settings[item.id].hours}h → 오늘 {settings[item.id].todayHours}h</div></div>) : <div className="rounded-lg bg-teal-soft p-4 text-sm leading-6 text-slate-600">선택한 모든 가전이 평소 사용 범위 안에 있습니다.</div>}
+          </div>
+          <p className="mt-4 text-[11px] leading-5 text-slate-400">전력 패턴의 편차를 감지하는 간이 모델이며, 고장이나 응급상황을 확정하지 않습니다.</p>
+        </section>
+      </div>
+
+      <section className="card overflow-hidden">
+        <div className="border-b border-slate-100 px-5 py-4"><div className="text-sm font-bold">가전별 이상 신호 상세</div><div className="mt-1 text-xs text-slate-400">평소 사용량과 오늘 관측값의 차이를 가전별로 확인합니다.</div></div>
+        <div className="divide-y divide-slate-100 px-5">
+          {result.applianceRows.map((item) => <div key={item.id} className="grid items-center gap-2 py-3 text-sm sm:grid-cols-[1fr_120px_120px]"><div className="font-medium">{item.icon} {item.name} <span className="ml-2 text-xs font-normal text-slate-400">{item.watt.toLocaleString()}W</span></div><div><span className="text-xs text-slate-400">월 예상 </span><b>{item.normal.toFixed(1)}kWh</b></div><div className={item.deviation > result.threshold ? "font-bold text-danger" : "text-slate-500"}>오늘 {item.today.toFixed(1)}kWh</div></div>)}
         </div>
-      ) : (
-        <Detail c={c} onBack={() => setSel(null)} />
+      </section>
+        </>
       )}
     </div>
   );
 }
 
 function Kpi({ label, value, sub, tone = "text-ink" }: { label: string; value: string; sub?: string; tone?: string }) {
-  return (
-    <div className="card p-5">
-      <div className="text-xs font-semibold text-slate-500">{label}</div>
-      <div className={`mt-1 text-2xl font-extrabold ${tone}`}>{value}</div>
-      {sub && <div className="mt-1 text-xs text-slate-400">{sub}</div>}
-    </div>
-  );
+  return <div className="card p-5"><div className="text-xs font-semibold text-slate-500">{label}</div><div className={`mt-1 text-2xl font-extrabold ${tone}`}>{value}</div>{sub && <div className="mt-1 text-xs text-slate-400">{sub}</div>}</div>;
 }
 
-function Detail({ c, onBack }: { c: HouseholdCalc; onBack: () => void }) {
-  const elderly = !!c.hh.elderly;
-  const [aFrom, setAFrom] = useState(14);
-  const [aNow, setANow] = useState(17);
-  const aNowH = Math.max(aFrom, aNow);
-  const an = useMemo(() => (elderly ? anomaly(aFrom, aNowH) : null), [elderly, aFrom, aNowH]);
-  const anTone = an ? (an.tier === "경보" ? "#D8432B" : an.tier === "주의" ? "#E39A00" : "#12A150") : "#D8432B";
-  const chartData = c.items.map((a) => ({ name: `${a.icon} ${a.name}`, kwh: +a.monthlyKwh.toFixed(1) }));
-
-  const [msgs, setMsgs] = useState<Msg[]>([
-    {
-      role: "bot",
-      text: `${c.hh.name} 데이터예요 🔌 “제일 많이 쓰는 가전?”, “뭘 줄여야 해?”${elderly ? ", “이 어르신 이상 있어?”" : ""} 물어보세요.`,
-    },
-  ]);
-  const [input, setInput] = useState("");
-  const [subsidyOn, setSubsidyOn] = useState(true);
-  const hs = homeSolar(c.hh.solarKw ?? 0.4, c.monthly * 12, subsidyOn);
-  const listRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
-  }, [msgs]);
-
-  function reply(q: string): { text: string; set?: [number, number] } {
-    if (elderly) {
-      if (has(q, "쓰러", "위험 상황", "이상 상황", "비상", "응급", "위험한"))
-        return { set: [13, 20], text: "⚠️ 위험 상황을 재현했어요. 오후 1시부터 활동가전이 멈춘 시나리오로 전환합니다 — 위 이상감지 패널이 ‘경보’로 바뀐 걸 확인하세요." };
-      if (has(q, "정상", "평소", "되돌", "괜찮", "해제", "원래"))
-        return { set: [22, 22], text: "✅ 정상 하루로 되돌렸어요. 활동가전이 평소 범위 안에 있어 위험도가 ‘관심’으로 내려갑니다." };
-      if (an && has(q, "이상", "안부", "위험", "상태", "안전", "지금"))
-        return { text: `🛟 이상 패턴 점검 — 현재 위험도 ‘${an.tier}’(${an.risk}/100). ${an.narrative}` };
-    }
-    return { text: houseAnswer(q, c) };
-  }
-  function send(text: string) {
-    const t = text.trim();
-    if (!t) return;
-    setMsgs((m) => [...m, { role: "user", text: t }]);
-    setInput("");
-    const r = reply(t);
-    if (r.set) {
-      setAFrom(r.set[0]);
-      setANow(r.set[1]);
-    }
-    setTimeout(() => setMsgs((m) => [...m, { role: "bot", text: r.text }]), 240);
-  }
-
-  const chips = elderly
-    ? ["쓰러진 상황 보여줘", "정상으로 되돌려", "이 어르신 이상 있어?", "뭘 줄여야 해?"]
-    : ["제일 많이 쓰는 가전?", "뭘 줄여야 해?", "이 집 요금 얼마?", "에어컨 사용량은?"];
-
-  const actData = an
-    ? an.activity.map((a) => ({
-        hour: a.hour,
-        lo: Math.max(0, a.base - a.band),
-        band: 2 * a.band,
-        base: a.base,
-        today: a.hour <= an.nowHour ? a.today : null,
-      }))
-    : [];
-
+function AnomalyCard({ anomaly }: { anomaly: DemoResult["anomaly"] }) {
+  const copy = SCENARIO_COPY[anomaly.scenario] ?? SCENARIO_COPY.normal;
+  const ratio = anomaly.score / Math.max(0.001, anomaly.threshold);
+  const gauge = Math.min(100, Math.round(ratio * 50));
   return (
-    <div className="space-y-6">
-      <button onClick={onBack} className="text-sm text-slate-500 hover:underline">← 가정 목록</button>
-
-      <div className="card flex flex-wrap items-center gap-4 p-6">
-        <div className="text-4xl">{c.hh.emoji}</div>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <div className="text-xl font-extrabold">{c.hh.name}</div>
-            {elderly && <span className="badge bg-danger-soft text-danger">🛟 관심 필요</span>}
-          </div>
-          <div className="text-xs text-slate-400">{c.hh.persons} · {c.hh.note}</div>
-        </div>
+    <section className={`card overflow-hidden border ${anomaly.isAnomaly ? "border-danger/30" : "border-teal/20"}`}>
+      <div className={`p-5 ${anomaly.isAnomaly ? "bg-danger-soft" : "bg-teal-soft"}`}>
+        <div className="flex items-center justify-between"><span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Anomaly detection</span><span className={`badge bg-white ${anomaly.isAnomaly ? "text-danger" : "text-teal"}`}>{anomaly.isAnomaly ? "확인 필요" : "정상"}</span></div>
+        <div className={`mt-4 text-2xl font-black ${anomaly.isAnomaly ? "text-danger" : "text-teal"}`}>{copy.title}</div>
+        <p className="mt-2 break-keep text-sm leading-6 text-slate-600">{copy.detail}</p>
       </div>
-
-      {/* KPI */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Kpi label="통합 월 사용량" value={`${c.monthly.toFixed(0)}kWh`} sub="가전 합산(상향식)" />
-        <Kpi label="예상 청구요금" value={won(c.billTotal)} tone="text-amber" />
-        <Kpi label="누진 구간" value={`${c.tier}구간`} tone={c.tier === 3 ? "text-danger" : "text-ink"} />
-        <Kpi label="최다 사용 가전" value={`${c.top.icon} ${c.top.name}`} sub={`${(c.top.share * 100).toFixed(0)}% · ${won(c.top.cost)}`} tone="text-teal" />
+      <div className="p-5">
+        <div className="flex items-center justify-between text-xs"><span className="font-bold text-slate-600">기준선 편차</span><span className="text-slate-400">모델 점수 {anomaly.score.toFixed(2)} / 기준 {anomaly.threshold.toFixed(2)}</span></div>
+        <div className="relative mt-2 h-2 rounded-full bg-slate-100"><div className={`h-full rounded-full ${anomaly.isAnomaly ? "bg-danger" : "bg-teal"}`} style={{ width: `${gauge}%` }} /><div className="absolute -top-1 left-1/2 h-4 w-px bg-slate-400" title="이상 판단 기준" /></div>
+        <div className="mt-1 flex justify-between text-[9px] text-slate-400"><span>평소 범위</span><span>판단 기준</span><span>높은 편차</span></div>
+        <div className="mt-5 rounded-xl bg-slate-50 p-4"><div className="text-xs font-bold text-ink">권장 조치</div><p className="mt-1 break-keep text-xs leading-5 text-slate-500">{copy.action}</p></div>
+        <p className="mt-4 text-[10px] leading-4 text-slate-400">이 결과는 전력 패턴 편차에 대한 AI 보조 진단이며, 기기 고장이나 응급상황을 확정하지 않습니다.</p>
       </div>
-
-      {/* 이상 패턴 (노령 가정만) */}
-      {an && (
-        <section className="card border-danger/30 p-5" style={{ background: "#FDF4F2" }}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm font-bold text-danger">🛟 이상 패턴 감지 — 이 가정은 노령 1인가구로 관심이 필요합니다</div>
-            <span className="badge bg-white" style={{ color: anTone }}>위험도 {an.risk}/100 · {an.tier}</span>
-          </div>
-          <div className="mt-1 text-xs text-slate-500">
-            활동 신호 가전(TV·전기포트·조명)이 평소 범위를 벗어나 <b>{an.lastActiveHour}시부터 활동 정지</b> — 냉장고는 정상 가동 중(외출 아님). 슬라이더나 아래 챗봇으로 상황을 바꿔보세요.
-          </div>
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">
-            <div>
-              <div className="label">활동 정지 시작 · {aFrom}시</div>
-              <input type="range" min={6} max={22} value={aFrom} onChange={(e) => setAFrom(+e.target.value)} className="w-full accent-danger" />
-            </div>
-            <div>
-              <div className="label">현재 시각 · {aNowH}시</div>
-              <input type="range" min={aFrom} max={23} value={aNowH} onChange={(e) => setANow(+e.target.value)} className="w-full accent-danger" />
-            </div>
-          </div>
-          <div className="mt-3 h-56">
-            <ResponsiveContainer>
-              <ComposedChart data={actData} margin={{ left: -12, right: 8, top: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1e4e2" />
-                <XAxis dataKey="hour" tickFormatter={(h) => `${h}시`} tick={{ fontSize: 10, fill: "#b08a84" }} interval={2} />
-                <YAxis tick={{ fontSize: 10, fill: "#b08a84" }} unit="W" width={42} />
-                <Tooltip formatter={(v: number | null) => (v == null ? "-" : `${Math.round(v)}W`)} labelFormatter={(h) => `${h}시`} />
-                <Area dataKey="lo" stackId="b" stroke="none" fill="transparent" isAnimationActive={false} />
-                <Area dataKey="band" stackId="b" stroke="none" fill="#e7cfca" fillOpacity={0.6} isAnimationActive={false} />
-                <Line dataKey="base" stroke="#c9a59e" strokeDasharray="4 4" dot={false} isAnimationActive={false} />
-                <Line dataKey="today" stroke={anTone} strokeWidth={3} dot={false} connectNulls isAnimationActive={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-2 rounded-lg bg-white/70 p-3 text-xs text-slate-600">“{an.narrative}”</div>
-        </section>
-      )}
-
-      {/* 가전별 상세 */}
-      <section className="grid gap-4 lg:grid-cols-[1.15fr_1fr]">
-        <div className="card p-5">
-          <div className="text-sm font-bold">가전별 월 사용량</div>
-          <div className="mt-3 h-80">
-            <ResponsiveContainer>
-              <BarChart data={chartData} layout="vertical" margin={{ left: 40, right: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#eef1f4" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: "#94a3b8" }} unit="k" />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "#475569" }} width={130} />
-                <Tooltip formatter={(v: number) => `${v.toFixed(0)}kWh`} />
-                <Bar dataKey="kwh" radius={[0, 6, 6, 0]}>
-                  {chartData.map((_, i) => (
-                    <Cell key={i} fill={i === 0 ? AMBER : i === 1 ? TEAL : "#cbd5e1"} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        <div className="card p-5">
-          <div className="text-sm font-bold">가전별 상세 (정격전력 × 사용시간)</div>
-          <div className="mt-3 divide-y divide-slate-100">
-            {c.items.map((a) => (
-              <div key={a.name} className="flex items-center justify-between py-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <span>{a.icon}</span>
-                  <div>
-                    <div className="font-medium text-slate-700">{a.name}</div>
-                    <div className="text-xs text-slate-400">{a.watt}W × {a.hours}h/일</div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="font-bold">{a.monthlyKwh.toFixed(0)}kWh</div>
-                  <div className="text-xs text-slate-400">{won(a.cost)} · {(a.share * 100).toFixed(0)}%</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 태양광 설치 시뮬레이션 */}
-      {c.hh.bIdx != null && (
-        <section className="card p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm font-bold">☀️ 이 가정 태양광 설치 시뮬레이션 (베란다형)</div>
-            <label className="flex items-center gap-2 text-xs text-slate-500">
-              보조금 수령
-              <button
-                onClick={() => setSubsidyOn((v) => !v)}
-                className={`relative h-5 w-9 rounded-full transition ${subsidyOn ? "bg-ok" : "bg-slate-300"}`}
-              >
-                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition ${subsidyOn ? "left-4" : "left-0.5"}`} />
-              </button>
-            </label>
-          </div>
-          <div className="mt-1 text-xs text-slate-400">지도에서 이 가정 건물(하이라이트)을 확인하고, 권장 용량 기준 발전·절감·회수를 실제 시장가로 계산합니다.</div>
-          <div className="mt-3 grid gap-4 lg:grid-cols-[1.35fr_1fr]">
-            <BuildingSolarMap focusIdx={c.hh.bIdx} focusLoc={c.hh.loc} height={380} />
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  ["권장 용량", `${hs.kw}kW`, "text-ink"],
-                  ["연 발전량", `${hs.genYr.toLocaleString()}kWh`, "text-ink"],
-                  ["RE100 달성률", `${hs.re100.toFixed(0)}%`, "text-teal"],
-                  ["투자 회수", `${hs.bep.toFixed(1)}년`, "text-amber"],
-                ].map(([l, v, t]) => (
-                  <div key={l} className="rounded-lg border border-slate-200 p-3 text-center">
-                    <div className="text-xs text-slate-400">{l}</div>
-                    <div className={`text-lg font-extrabold ${t}`}>{v}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="space-y-1.5 rounded-lg bg-slate-50 p-3 text-sm">
-                <div className="flex justify-between"><span className="text-slate-400">자부담 ({subsidyOn ? "보조금 수령" : "미수령"})</span><b>약 {hs.selfPay}만원</b></div>
-                <div className="flex justify-between"><span className="text-slate-400">연 절감액</span><span>약 {hs.saveYr}만원</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">25년 순이익</span><b className="text-ok">{hs.net25.toLocaleString()}만원</b></div>
-              </div>
-              <div className="text-[11px] text-slate-400">※ 실제 시장가 표(400W 단위) 선형 환산 추정. 건물 그림자 등 정밀 산출은 별도 분석 필요.</div>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* 챗봇 */}
-      <div className="card overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-          <div className="text-sm font-bold">🤖 절전 비서 <span className="ml-1 font-normal text-slate-400">· {c.hh.name} 연동</span></div>
-          <span className="badge bg-slate-100 text-slate-500">최다: {c.top.icon} {c.top.name}</span>
-        </div>
-        <div ref={listRef} className="max-h-72 space-y-3 overflow-y-auto px-5 py-4">
-          {msgs.map((m, i) => (
-            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${m.role === "user" ? "bg-ink text-white" : "bg-slate-100 text-slate-700"}`}>
-                {m.text}
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-1.5 px-5">
-          {chips.map((ch) => (
-            <button key={ch} onClick={() => send(ch)} className="chip hover:bg-slate-200">{ch}</button>
-          ))}
-        </div>
-        <form onSubmit={(e) => { e.preventDefault(); send(input); }} className="flex gap-2 p-5">
-          <input value={input} onChange={(e) => setInput(e.target.value)} className="input" placeholder="이 가정에 대해 물어보세요 — 예: 뭘 줄여야 해?" />
-          <button type="submit" className="btn-primary shrink-0">전송</button>
-        </form>
-      </div>
-    </div>
+    </section>
   );
 }

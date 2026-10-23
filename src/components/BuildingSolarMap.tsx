@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useEffect, useState } from "react";
 import DeckGL from "@deck.gl/react";
@@ -42,15 +43,49 @@ function ramp(p: number): [number, number, number] {
 }
 
 type FC = { meta?: { center?: [number, number]; count?: number } };
+export type SelectedSolarBuilding = {
+  idx: number;
+  loc: [number, number];
+  kwh: number;
+  h: number;
+  area: number;
+  address?: string;
+  source?: "search" | "dataset";
+};
+export type SearchedBuilding = { label: string; loc: [number, number]; geometry: GeoJSON.Geometry; addressType?: string };
+
+function featureCenter(feature: any): [number, number] {
+  const ring = feature.geometry?.coordinates?.[0] ?? [];
+  if (!ring.length) return [127.028, 37.588];
+  const total = ring.reduce((sum: [number, number], point: [number, number]) => [sum[0] + point[0], sum[1] + point[1]], [0, 0]);
+  return [total[0] / ring.length, total[1] / ring.length];
+}
+
+function buildingArea(geometry: any, latitude: number) {
+  if (geometry?.type !== "Polygon" || !geometry.coordinates?.[0]?.length) return 120;
+  const ring = geometry.coordinates[0] as [number, number][];
+  const mx = 111320 * Math.cos(latitude * Math.PI / 180);
+  const my = 110540;
+  let sum = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const [x1, y1] = ring[i]; const [x2, y2] = ring[(i + 1) % ring.length];
+    sum += x1 * mx * y2 * my - x2 * mx * y1 * my;
+  }
+  return Math.max(20, Math.round(Math.abs(sum) / 2));
+}
 
 export default function BuildingSolarMap({
   focusIdx,
   focusLoc,
   height = 460,
+  onBuildingSelect,
+  searchedBuilding,
 }: {
   focusIdx?: number;
   focusLoc?: [number, number];
   height?: number;
+  onBuildingSelect?: (building: SelectedSolarBuilding) => void;
+  searchedBuilding?: SearchedBuilding;
 }) {
   const [data, setData] = useState<(GeoJSON.FeatureCollection & FC) | null>(null);
   const [hover, setHover] = useState<{ x: number; y: number; kwh: number; h: number; area: number } | null>(null);
@@ -67,6 +102,14 @@ export default function BuildingSolarMap({
 
   const center = focusLoc ?? data?.meta?.center ?? [127.028, 37.588];
   const focused = typeof focusIdx === "number";
+  const focusLongitude = focusLoc?.[0];
+  const focusLatitude = focusLoc?.[1];
+  const [viewState, setViewState] = useState({ longitude: center[0], latitude: center[1], zoom: 15.2, pitch: 52, bearing: -18 });
+
+  useEffect(() => {
+    if (focusLongitude == null || focusLatitude == null) return;
+    setViewState((v) => ({ ...v, longitude: focusLongitude, latitude: focusLatitude, zoom: focused ? 17.4 : 16.3, pitch: 55 }));
+  }, [focusLongitude, focusLatitude, focused]);
 
   const layer = new GeoJsonLayer({
     id: "buildings",
@@ -86,19 +129,38 @@ export default function BuildingSolarMap({
           ? { x: info.x, y: info.y, kwh: info.object.properties.kwh, h: info.object.properties.h, area: info.object.properties.area }
           : null
       ),
+    onClick: (info: any) => {
+      if (!info.object || !onBuildingSelect) return;
+      const props = info.object.properties;
+      onBuildingSelect({ idx: props.idx, loc: featureCenter(info.object), kwh: props.kwh, h: props.h, area: props.area, source: "dataset" });
+    },
     updateTriggers: { getFillColor: focusIdx, getElevation: focusIdx, getLineColor: focusIdx },
+  });
+
+  const searchGeometry = searchedBuilding?.geometry?.type === "Point"
+    ? { type: "Polygon", coordinates: [[[-0.00007, -0.000055], [0.00007, -0.000055], [0.00007, 0.000055], [-0.00007, 0.000055], [-0.00007, -0.000055]].map(([x, y]) => [searchedBuilding.loc[0] + x, searchedBuilding.loc[1] + y])] }
+    : searchedBuilding?.geometry;
+  const searchedArea = searchedBuilding ? buildingArea(searchGeometry, searchedBuilding.loc[1]) : 0;
+  const searchedKwh = Math.round(searchedArea * 245);
+  const searchedLayer = searchedBuilding && new GeoJsonLayer({
+    id: "searched-building",
+    data: { type: "Feature", geometry: searchGeometry, properties: {} } as any,
+    extruded: true,
+    getElevation: 22,
+    getFillColor: [10, 154, 168, 210],
+    getLineColor: [255, 255, 255, 255],
+    lineWidthMinPixels: 3,
+    pickable: true,
+    onClick: () => onBuildingSelect?.({ idx: -1, loc: searchedBuilding.loc, area: searchedArea, h: 12, kwh: searchedKwh, address: searchedBuilding.label, source: "search" }),
   });
 
   return (
     <div className="relative w-full overflow-hidden rounded-xl" style={{ height }}>
       <DeckGL
-        initialViewState={
-          focused
-            ? { longitude: center[0], latitude: center[1], zoom: 16.6, pitch: 55, bearing: -18 }
-            : { longitude: center[0], latitude: center[1], zoom: 15.2, pitch: 52, bearing: -18 }
-        }
+        viewState={viewState}
+        onViewStateChange={({ viewState: next }: any) => setViewState(next)}
         controller={true}
-        layers={[layer]}
+        layers={searchedLayer ? [layer, searchedLayer] : [layer]}
       >
         <Map reuseMaps mapStyle={MAP_STYLE as any} />
       </DeckGL>
@@ -122,11 +184,16 @@ export default function BuildingSolarMap({
       {data && (
         <div className="absolute right-3 top-3 z-10 rounded-lg bg-white/90 px-2.5 py-1.5 text-[11px] shadow-card">
           {focused ? (
-            <span className="font-semibold text-teal">📍 이 가정 위치 (하이라이트)</span>
+            <span className="font-semibold text-teal">📍 선택한 건물 (하이라이트)</span>
           ) : (
             <span className="text-slate-500">서울 안암·고려대 인근 · 실제 건물 {data.meta?.count?.toLocaleString()}동 (OSM)</span>
           )}
         </div>
+      )}
+      {searchedBuilding && (
+        <button type="button" onClick={() => onBuildingSelect?.({ idx: -1, loc: searchedBuilding.loc, area: searchedArea, h: 12, kwh: searchedKwh, address: searchedBuilding.label, source: "search" })} className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full bg-teal px-3 py-1.5 text-xs font-bold text-white shadow-pop">
+          정확한 검색 건물 · 상세 보기
+        </button>
       )}
     </div>
   );

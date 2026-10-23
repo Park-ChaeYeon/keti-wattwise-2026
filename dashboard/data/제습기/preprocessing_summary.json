@@ -1,18 +1,22 @@
 {
   "appliance": "제습기",
   "channel_id": "ch20",
-  "dataset": "measurement",
-  "source_files": 19,
+  "dataset": "measurement2",
+  "source_directory": "실측 2",
+  "source_files": 31,
   "series": 1,
   "series_ids": [
     "채연_제습기"
   ],
-  "hourly_rows": 456,
-  "valid_target_rows": 456,
+  "series_rows": {
+    "채연_제습기": 744
+  },
+  "hourly_rows": 744,
+  "valid_target_rows": 744,
   "low_coverage_rows": 0,
   "minimum_hourly_coverage": 0.8,
-  "period_start": "2023-08-15 00:00:00",
-  "period_end": "2023-09-02 23:00:00",
-  "output": "/Users/jungbin/Desktop/project/keti/실측/preprocessing_data/제습기/chronos2/chronos_hourly.parquet",
-  "model_input": "/Users/jungbin/Desktop/project/keti/실측/preprocessing_data/제습기/chronos2/chronos_model_input.parquet"
+  "period_start": "2026-08-15 00:00:00",
+  "period_end": "2026-09-14 23:00:00",
+  "output": "dashboard/data/제습기/chronos_hourly.parquet",
+  "model_input": "dashboard/data/제습기/chronos_model_input.parquet"
 }

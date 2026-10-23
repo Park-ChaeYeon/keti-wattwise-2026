@@ -1,5 +1,6 @@
 import Shot from "@/components/Shot";
 import ForecastLab from "./ForecastLab";
+import DeployDataExplorer from "./DeployDataExplorer";
 
 const BP = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -11,10 +12,10 @@ const KIT = [
 ];
 
 const FLOW = [
-  "분전반·콘센트에 센서 설치",
-  "1분 단위로 전력 연속 수집",
-  "정상 패턴 학습 (오토인코더)",
-  "예측·이상탐지·거래 판단",
+  { en: "MEASURE", title: "센서 설치·측정", body: "분전반과 콘센트에 센서를 직접 설치하고 전력 신호를 연속 수집했습니다." },
+  { en: "REFINE", title: "결측·품질 정제", body: "시간 단위로 집계하고 수집률과 결측 여부를 함께 기록해 신뢰할 수 있는 입력을 만들었습니다." },
+  { en: "LEARN", title: "가전별 모델 학습", body: "가전과 실증 대상별 시계열을 구성해 Chronos-2 체크포인트를 학습했습니다." },
+  { en: "PROVE", title: "로컬 추론 검증", body: "저장된 모델을 실제로 불러와 다음 24시간 예측과 불확실성 범위를 확인합니다." },
 ];
 
 const SHOTS = [
@@ -25,28 +26,38 @@ const SHOTS = [
 
 export default function DeployPage() {
   return (
-    <div className="space-y-12">
+    <div className="space-y-16">
       {/* 히어로 */}
-      <section className="card overflow-hidden">
-        <div className="grid gap-6 p-8 md:grid-cols-[1.3fr_1fr] md:p-10">
+      <section className="overflow-hidden rounded-[2rem] bg-[#11191d] text-white shadow-[0_28px_80px_rgba(15,23,42,0.18)]">
+        <div className="grid gap-8 p-7 md:grid-cols-[1.25fr_0.75fr] md:p-12">
           <div className="self-center">
-            <div className="badge bg-amber-soft text-amber">실증 · 직접 측정한 데이터</div>
-            <h1 className="mt-4 text-3xl font-extrabold leading-tight tracking-tight md:text-4xl">
-              자취방에서 <span className="text-amber">직접</span> 전력 데이터를 모읍니다
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs font-bold text-[#63dbe3]"><span className="h-1.5 w-1.5 rounded-full bg-[#63dbe3]" />FIELD VALIDATION · 실증</div>
+            <h1 className="mt-6 max-w-2xl break-keep text-4xl font-black leading-[1.12] tracking-[-0.045em] md:text-5xl">
+              측정부터 예측까지,<br /><span className="text-[#ffc34d]">직접 끝까지 만들었습니다.</span>
             </h1>
-            <p className="mt-4 max-w-xl text-sm leading-relaxed text-slate-600">
-              공개 데이터만 사용하지 않았습니다. 팀원이 실제 자취방에 라즈베리파이와 CT센서를 설치해 전기를 직접 측정하고 있습니다.
-              이 데이터로 예측·이상탐지·거래가 실제 가정에서 동작하는지 검증합니다.
-              한국 1인가구를 이만큼 촘촘히 잰 데이터는 흔치 않습니다.
+            <p className="mt-6 max-w-2xl break-keep text-sm leading-7 text-white/60 md:text-base">
+              센서를 설치하는 데서 멈추지 않았습니다. 전력 신호를 모으고, 결측과 품질을 확인하고, 가전별 시계열로 정제한 뒤 실제 모델 추론까지 연결했습니다. 아래 화면의 숫자와 그래프는 이 과정을 거친 실증 데이터를 그대로 보여줍니다.
             </p>
+            <div className="mt-8 grid max-w-2xl grid-cols-3 gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10">
+              <HeroStat value="4종" label="가전별 시계열" /><HeroStat value="1시간" label="정제 데이터 단위" /><HeroStat value="24시간" label="모델 예측 구간" />
+            </div>
           </div>
-          <div className="self-center">
+          <div className="self-center rounded-2xl bg-white/[0.04] p-2 ring-1 ring-white/10">
             <Shot src={`${BP}/deploy/kit.jpg`} caption="측정 키트 · 라즈베리파이 5, CT센서, 브레드보드, 저항·ADC 부품" h="h-64 md:h-full" />
           </div>
         </div>
       </section>
 
-      {/* 실제 모델 예측 */}
+      <section>
+        <div className="eyebrow">From signal to proof</div>
+        <div className="flex flex-wrap items-end justify-between gap-4"><h2 className="section-title">측정부터 추론까지 이어지는<br className="hidden md:block" /> 검증 가능한 파이프라인</h2><p className="max-w-md break-keep text-sm leading-7 text-slate-500">각 단계의 결과가 다음 단계의 입력으로 이어집니다. 실측값과 모델 결과를 한 페이지에 둔 이유입니다.</p></div>
+        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">{FLOW.map((step, index) => <div key={step.en} className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><span className="text-[10px] font-black tracking-[0.18em] text-teal">{step.en}</span><span className="text-xs font-black text-slate-300">0{index + 1}</span></div><div className="mt-6 text-base font-black">{step.title}</div><p className="mt-2 break-keep text-xs leading-6 text-slate-500">{step.body}</p><div className="absolute bottom-0 left-0 h-1 w-0 bg-teal transition-all group-hover:w-full" /></div>)}</div>
+      </section>
+
+      {/* 우리 실증 데이터 */}
+      <DeployDataExplorer />
+
+      {/* 우리 실증 데이터 기반 실제 모델 예측 */}
       <ForecastLab />
 
       {/* 구성 키트 */}
@@ -78,22 +89,6 @@ export default function DeployPage() {
         </div>
       </section>
 
-      {/* 수집 흐름 */}
-      <section>
-        <div className="eyebrow">Pipeline</div>
-        <h2 className="section-title">수집 흐름</h2>
-        <div className="mt-5 flex flex-wrap items-center gap-2">
-          {FLOW.map((f, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <div className="rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">
-                <span className="mr-1.5 text-amber">{i + 1}</span>{f}
-              </div>
-              {i < FLOW.length - 1 && <span className="text-slate-300">→</span>}
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* 실측 데이터 */}
       <section>
         <div className="eyebrow">Live Data</div>
@@ -109,16 +104,14 @@ export default function DeployPage() {
       </section>
 
       {/* 왜 실측인가 */}
-      <section className="card bg-ink p-8 text-white">
-        <div className="text-sm font-semibold text-amber">왜 직접 측정하는가</div>
-        <p className="mt-2 max-w-3xl text-lg font-bold leading-snug">
-          공개 데이터는 대개 오래됐거나 뭉뚱그려져 있습니다. 우리는 <span className="text-amber">지금 사는 집</span>을 직접 측정해,
-          예측이 실제로 잘 맞는지 검증합니다.
-        </p>
-        <p className="mt-3 text-xs text-white/70">
-          또한 집 안에서 측정하고 처리하기 때문에, 생활 패턴이 담긴 전력 데이터가 밖으로 나가지 않습니다. 프라이버시도 함께 지키는 방식입니다.
-        </p>
+      <section className="overflow-hidden rounded-[2rem] bg-gradient-to-br from-[#0b8e9a] to-[#086b75] p-8 text-white md:p-11">
+        <div className="text-xs font-black uppercase tracking-[0.2em] text-white/55">What we proved</div>
+        <div className="mt-5 grid gap-8 lg:grid-cols-[1fr_0.8fr]"><p className="max-w-3xl break-keep text-2xl font-black leading-snug md:text-3xl">실측 데이터가 모델 입력이 되고,<br />모델 출력이 다시 사용자의 판단으로 이어집니다.</p><p className="break-keep text-sm leading-7 text-white/70">WattWise의 실증은 그래프 한 장을 만드는 일이 아닙니다. 수집 품질을 확인하고, 반복 가능한 전처리와 로컬 추론 환경을 구성해 실제 서비스 흐름 전체가 작동하는지 증명하는 과정입니다.</p></div>
       </section>
     </div>
   );
+}
+
+function HeroStat({ value, label }: { value: string; label: string }) {
+  return <div className="bg-[#11191d] px-4 py-4"><div className="text-xl font-black text-white md:text-2xl">{value}</div><div className="mt-1 text-[10px] text-white/35 md:text-xs">{label}</div></div>;
 }
