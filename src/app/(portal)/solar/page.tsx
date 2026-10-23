@@ -75,14 +75,26 @@ export default function SolarPage() {
     try { localStorage.setItem("wattwise:solar-profile:v1", JSON.stringify(profile)); } catch { /* 브라우저 저장 불가 시 거래 화면 연동만 생략 */ }
   }, [annualConsumption, city.name, panelCount, r.annualGen, r.annualRevenue, r.selfUsed, r.surplus, searchedPlace?.label, systemKw]);
 
-  async function searchLocation(e: FormEvent) {
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q")?.trim();
+    if (!q) return;
+    setLocationQuery(q);
+    void runSearch(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function searchLocation(e: FormEvent) {
     e.preventDefault();
-    if (!locationQuery.trim()) return;
+    void runSearch(locationQuery);
+  }
+
+  async function runSearch(query: string) {
+    if (!query.trim()) return;
     setSearchState("loading");
     setSearchError("");
     setSelectedBuilding(null);
     try {
-      const response = await fetch(`/api/geocode?q=${encodeURIComponent(locationQuery)}`);
+      const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
       setSearchedPlace({ label: result.label, loc: [result.lon, result.lat], geometry: result.geometry, addressType: result.addressType });
