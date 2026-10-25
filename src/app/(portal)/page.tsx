@@ -18,7 +18,7 @@ export default function Home() {
         <div className="relative mx-auto flex min-h-[640px] max-w-6xl items-end px-4 pb-14 pt-10 lg:min-h-[700px] lg:items-center lg:py-12">
           <div className="max-w-xl">
             <h1 className="break-keep text-4xl font-black leading-[1.35] tracking-[-0.03em] text-ink md:text-5xl md:leading-[1.35] lg:text-[3.4rem]">
-              전기요금부터<br />에너지 효율까지<br />스마트하게
+              <span className="glow-brown">전기요금</span>부터<br /><span className="glow-brown">에너지 효율</span>까지<br />스마트하게
             </h1>
             <p className="mt-6 break-keep text-base font-semibold leading-8 text-ink md:text-lg">
               전력 사용량부터 예상 전기요금까지,<br />에너지 사용 현황을 한눈에 확인하세요.
@@ -32,14 +32,16 @@ export default function Home() {
       </section>
 
       <section className="mx-auto max-w-6xl px-4 py-16 md:py-20">
-        <div className="rounded-[2rem] bg-[#FAF6EC] px-6 py-10 md:px-12 md:py-12">
-        <h2 className="text-center text-4xl font-black tracking-[-0.03em] text-ink md:text-[2.75rem]">WattWise</h2>
+        <h2 className="flex items-center justify-center gap-3 text-4xl font-black tracking-[-0.03em] text-[#3D2B1F] md:text-[2.75rem]">
+          <svg viewBox="0 0 24 24" className="h-8 w-8 md:h-10 md:w-10" fill="#3D2B1F" aria-hidden><path d="M13.5 2 4.5 13.5h6L9.5 22l9-11.5h-6z" /></svg>
+          WattWise Point
+          <svg viewBox="0 0 24 24" className="h-8 w-8 md:h-10 md:w-10" fill="#3D2B1F" aria-hidden><path d="M13.5 2 4.5 13.5h6L9.5 22l9-11.5h-6z" /></svg>
+        </h2>
         <div className="mt-10 grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6">
-          <Tile href="/analytics" image={photo("kitchen-laptop")} title="사용량·요금 예측" body="내일 24시간, 이번 달 요금" />
-          <Tile href="/households" image={photo("feature-kettle")} title="가족 안부 확인" body="평소와 다른 생활 신호" />
-          <Tile href="/solar" image={photo("solar-roof")} title="태양광 설치 계산" body="발전량과 손익분기" />
-          <Tile href="/trade" image={photo("power-lines")} title="남는 전기 거래" body="잉여 전력 판매 체험" />
-        </div>
+          <Tile href="/analytics" image={photo("kitchen-laptop")} title="사용량·요금 예측" body="내일 24시간 사용량과 이번 달 예상 요금" />
+          <Tile href="/households" image={photo("feature-kettle")} title="가족 안부 확인" body="평소와 다른 생활 신호를 먼저 알림" />
+          <Tile href="/solar" image={photo("solar-roof")} title="태양광 설치 계산" body="우리 집 발전량과 투자 회수 기간" />
+          <Tile href="/trade" image={photo("power-lines")} title="남는 전기 거래" body="잉여 전력을 파는 과정 체험" />
         </div>
       </section>
 
@@ -74,15 +76,27 @@ export default function Home() {
 
       <section className="bg-white">
         <div className="mx-auto max-w-6xl px-4 pb-20">
-        <div className="flex flex-col items-center justify-center gap-4 py-6 sm:flex-row sm:gap-10">
-          <div className="relative h-48 w-44 md:h-60 md:w-52">
+        <div className="grid items-center gap-6 rounded-[2rem] bg-[#FAF6EC] px-6 py-10 md:grid-cols-[auto_1fr] md:gap-10 md:px-12 md:py-12">
+          <div className="relative mx-auto h-40 w-36 md:h-52 md:w-44">
             <Image src={`${BP}/img/wattwise-ai-consultant.png`} alt="전력 AI 상담사 와티" fill unoptimized className="object-contain drop-shadow-xl" />
           </div>
           <div>
-            <Link href="/chat" className="group inline-flex items-center gap-3 rounded-full bg-amber px-9 py-4 text-xl font-black text-white shadow-lg shadow-amber/30 transition hover:-translate-y-0.5 hover:brightness-105 hover:shadow-xl md:px-12 md:py-5 md:text-2xl">
-              와티에게 물어보기
-              <span className="transition group-hover:translate-x-1" aria-hidden>→</span>
-            </Link>
+            <h2 className="break-keep text-center text-2xl font-black tracking-[-0.03em] text-[#3D2B1F] md:text-left md:text-4xl">궁금한 건 와티에게 물어보세요</h2>
+            <form action="/chat" method="get" className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <input
+                name="q"
+                required
+                className="min-w-0 flex-1 rounded-2xl border-2 border-[#3D2B1F] bg-white px-5 py-4 text-base text-ink outline-none placeholder:text-slate-400 focus:ring-4 focus:ring-[#3D2B1F]/15"
+                placeholder="예: 이번 달 전기요금 얼마나 나올까?"
+                aria-label="와티에게 물어볼 질문"
+              />
+              <button className="rounded-2xl bg-amber px-8 py-4 text-lg font-bold text-white transition hover:brightness-105 sm:w-auto">물어보기</button>
+            </form>
+            <div className="mt-4 flex flex-wrap justify-center gap-2 md:justify-start">
+              {["에어컨 하루에 얼마나 써?", "누진 구간 언제 넘어?", "전기 절약 팁 알려줘"].map((q) => (
+                <Link key={q} href={`/chat?q=${encodeURIComponent(q)}`} className="rounded-full border border-[#3D2B1F]/20 bg-white px-4 py-2 text-sm text-[#3D2B1F] transition hover:border-[#3D2B1F]">{q}</Link>
+              ))}
+            </div>
           </div>
         </div>
         </div>
@@ -93,10 +107,15 @@ export default function Home() {
 
 function Tile({ href, image, title, body }: { href: string; image: string; title: string; body: string }) {
   return (
-    <Link href={href} className="group">
-      <div className="relative aspect-[4/3] overflow-hidden rounded-3xl"><Image src={image} alt="" fill unoptimized className="object-cover transition duration-500 group-hover:scale-105" /></div>
-      <div className="mt-3 text-base font-black text-ink md:text-lg">{title}</div>
-      <div className="mt-0.5 text-xs text-slate-500 md:text-sm">{body}</div>
+    <Link href={href} className="group flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white transition duration-300 hover:-translate-y-1 hover:border-[#3D2B1F]/20 hover:shadow-[0_18px_40px_-12px_rgba(61,43,31,0.25)]">
+      <div className="relative aspect-[4/3] overflow-hidden"><Image src={image} alt="" fill unoptimized className="object-cover transition duration-500 group-hover:scale-105" /></div>
+      <div className="flex flex-1 flex-col p-4 md:p-5">
+        <div className="text-base font-black text-ink md:text-lg">{title}</div>
+        <div className="mt-1 break-keep text-xs leading-5 text-slate-500 md:text-sm md:leading-6">{body}</div>
+        <div className="mt-auto pt-4 text-sm font-bold text-[#3D2B1F]">
+          자세히 보기 <span className="inline-block transition group-hover:translate-x-1" aria-hidden>→</span>
+        </div>
+      </div>
     </Link>
   );
 }
@@ -109,10 +128,10 @@ function Feature({ image, alt, credit, title, points, actions, reverse }: { imag
         {credit && <p className="absolute bottom-3 left-4 rounded-full bg-black/45 px-2.5 py-1 text-[10px] leading-4 text-white/90 backdrop-blur">{credit}</p>}
       </div>
       <div className={reverse ? "lg:order-1" : ""}>
-        <h2 className="break-keep text-3xl font-black leading-[1.2] tracking-[-0.03em] text-ink md:text-4xl">{title}</h2>
+        <h2 className="break-keep text-3xl font-black leading-[1.2] tracking-[-0.03em] text-[#3D2B1F] md:text-4xl">{title}</h2>
         <ul className="mt-6 space-y-3">
           {points.map((p) => (
-            <li key={p} className="flex items-start gap-3 text-base leading-7 text-ink">
+            <li key={p} className="flex items-start gap-3 text-base font-medium leading-7 text-black">
               <svg viewBox="0 0 24 24" className="mt-1 h-5 w-5 shrink-0 text-teal" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 12.5l5 5L20 6.5" /></svg>
               <span className="break-keep">{p}</span>
             </li>
